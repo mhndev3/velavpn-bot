@@ -1,0 +1,44 @@
+# ─── Secrets & Data (NEVER COMMIT) ───────────────────────────
+.env
+.env.*
+!.env.example
+*.db
+*.db-wal
+*.db-shm
+bot.db
+backups/
+sessions/
+
+# ─── Python ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ─── Virtual environments ────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ─── Editors / OS ────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Temp / scratch (project convention: files prefixed _) ───
+_*.py
+_*.json
+_*.txt
+*.log
+*.bak
