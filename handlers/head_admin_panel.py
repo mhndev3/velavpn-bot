@@ -226,7 +226,7 @@ async def ha_server_domain(cb: CallbackQuery, state: FSMContext):
         "🌐 تنظیم دامنهٔ سرور\n"
         "━━━━━━━━━━━━━━\n\n"
         "دامنهٔ فعلی: <code>" + cur + "</code>\n\n"
-        "دامنهٔ جدید را بفرست (مثلاً <code>gr1.sabroohoselehh.ir</code>).\n"
+        "دامنهٔ جدید را بفرست (مثلاً <code>panel.example.com</code>).\n"
         "این دامنه در ساخت لینک کانفیگ‌های این سرور استفاده می‌شود "
         "(به‌جای IP یا دامنهٔ پنل).\n\n"
         "برای پاک‌کردن دامنه، بنویس: <b>حذف</b>",
