@@ -120,6 +120,16 @@ async def _finish_and_menu(msg: Message, uid: int, state: FSMContext):
     await state.clear()
     from handlers.glass_menu import send_user_menu
     await answer_ui(msg, "onb_done_text", DEF["onb_done_text"], reply_markup=ReplyKeyboardRemove())
+    # پیام خوش‌آمد (همان صفحه‌ای که /start نشان می‌دهد) — قابل ویرایش از پنل
+    try:
+        from services.content_media_service import send_content_page
+        await send_content_page(
+            message=msg,
+            key="start_message",
+            fallback_text=("سلام 👋\n\nامروز تمامی خدمات فعال و آماده سرویس‌دهی است."),
+        )
+    except Exception:
+        pass
     await send_user_menu(msg, uid)
 
 
