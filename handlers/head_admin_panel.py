@@ -311,9 +311,26 @@ def settings_kb():
         [_btn("💳 کارت: " + short,          "ha:set_card_info")],
         [_btn("🎁 درصد کمیسیون رفرال",     "ha:set:referral_commission_percent")],
         [_btn(glass_lbl,                    "ha:toggle_glass")],
+        [_btn("🗄 بکاپ کامل (بات + پنل‌ها)", "ha:backup_all")],
         [_btn("💾 دانلود دیتابیس",          "ha:download_db")],
         [_btn("⬅️ بازگشت",                 "ha:home")],
     ])
+
+
+@router.callback_query(F.data == "ha:backup_all")
+async def ha_backup_all(cb: CallbackQuery):
+    if not is_admin(cb.from_user.id):
+        return await cb.answer("دسترسی ندارید", show_alert=True)
+    await cb.answer("⏳ در حال گرفتن بکاپ...", show_alert=False)
+    try:
+        from database.backup import run_full_backup
+        report = await run_full_backup(cb.bot, notify_id=cb.from_user.id)
+    except Exception as e:
+        report = "❌ خطا در بکاپ: " + repr(e)[:80]
+    try:
+        await cb.message.answer(report, reply_markup=back_kb("ha:settings"))
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data == "ha:toggle_glass")

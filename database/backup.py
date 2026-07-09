@@ -82,26 +82,76 @@ def restore_from_backup(backup_file: Path) -> bool:
 
 
 async def start_hourly_backup(bot):
-    """شروع بکاپ خودکار هر ۲۴ ساعت"""
+    """بکاپ خودکار هر ۲۴ ساعت: دیتابیس بات + دیتابیس پنل‌های X-UI"""
     import asyncio
     from config.settings import ADMIN_IDS, DEVELOPER_ID
 
     while True:
         try:
             await asyncio.sleep(86400)  # ۲۴ ساعت
-
-            success = await asyncio.to_thread(backup_database)
-
-            # پیام موفقیت به دولوپر (اگر ست شده)، وگرنه به هد‌ادمین
-            notify_id = DEVELOPER_ID if DEVELOPER_ID else (ADMIN_IDS[0] if ADMIN_IDS else None)
-            if success and notify_id:
-                try:
-                    await bot.send_message(
-                        chat_id=notify_id,
-                        text="✅ بکاپ روزانهٔ دیتابیس موفق بود",
-                    )
-                except Exception:
-                    pass
+            await run_full_backup(bot)
         except Exception as e:
             print(f"خطا در بکاپ خودکار: {e}")
             await asyncio.sleep(60)  # ۱ دقیقه و دوباره سعی کن
+
+
+async def run_full_backup(bot, notify_id: int | None = None) -> str:
+    """
+    یک دور کامل بکاپ: bot.db + دیتابیس همهٔ پنل‌های X-UI.
+    فایل‌ها برای دولوپر (یا notify_id) ارسال می‌شوند. گزارش متنی برمی‌گرداند.
+    """
+    import asyncio
+    from config.settings import ADMIN_IDS, DEVELOPER_ID
+    from aiogram.types import FSInputFile
+
+    if notify_id is None:
+        notify_id = DEVELOPER_ID if DEVELOPER_ID else (ADMIN_IDS[0] if ADMIN_IDS else None)
+
+    lines = ["🗄 <b>گزارش بکاپ</b>", "━━━━━━━━━━━━━━"]
+
+    # ۱) دیتابیس خود بات
+    bot_ok = await asyncio.to_thread(backup_database)
+    lines.append(("✅" if bot_ok else "❌") + " دیتابیس بات (bot.db)")
+
+    # ۲) دیتابیس پنل‌های X-UI
+    panel_files = []
+    try:
+        from services.xui_backup import backup_all_panels
+        results = await backup_all_panels()
+        if not results:
+            lines.append("ℹ️ سرور فعالی برای بکاپ نبود")
+        for r in results:
+            if r["ok"]:
+                size_kb = round(r["size"] / 1024, 1)
+                lines.append(f"✅ پنل «{r['label']}» — {size_kb} KB ({r['note']})")
+                panel_files.append(r["path"])
+            else:
+                lines.append(f"❌ پنل «{r['label']}» — {r['note']}")
+    except Exception as e:
+        lines.append(f"❌ خطا در بکاپ پنل‌ها: {repr(e)[:60]}")
+
+    report = "\n".join(lines)
+
+    if notify_id:
+        try:
+            await bot.send_message(chat_id=notify_id, text=report)
+        except Exception:
+            pass
+        # ارسال فایل‌ها
+        try:
+            latest = get_latest_backup()
+            if bot_ok and latest:
+                await bot.send_document(chat_id=notify_id,
+                                        document=FSInputFile(str(latest)),
+                                        caption="🤖 دیتابیس بات")
+        except Exception:
+            pass
+        for p in panel_files:
+            try:
+                await bot.send_document(chat_id=notify_id,
+                                        document=FSInputFile(p),
+                                        caption="🖥 دیتابیس پنل X-UI")
+            except Exception:
+                pass
+
+    return report
