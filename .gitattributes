@@ -1,7 +1,4 @@
 # ─── GitHub Linguist: language stats ─────────────────────────
-# Exclude dead/legacy code from the language breakdown
-_deprecated/**   linguist-vendored
-
 # Helper scripts shouldn't register as a language
 run.bat          linguist-detectable=false
 
