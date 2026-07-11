@@ -448,13 +448,17 @@ async def ui_download_db_cb(cb: CallbackQuery):
 
 # ─── چیدمان دکمه‌ها (ردیف‌محور: بالا/پایین + چپ/راست + ادغام/جدا) ───
 _ORDER_TITLE = (
-    "↕️ چیدمان دکمه‌های منو\n\n"
-    "🔼🔽 جابه‌جایی ردیف بالا/پایین\n"
-    "◀️▶️ جابه‌جایی در همان ردیف\n"
-    "🔗 هم‌ردیف کردن با ردیف بعد\n"
-    "✂️ جدا کردن به ردیف تازه\n\n"
-    "«⚡ خرید کانفیگ» همیشه اول و ثابت است.\n"
-    "تغییرات فوراً روی منوی کاربران اعمال می‌شود."
+    "🎨 چیدمان دکمه‌های منو\n"
+    "━━━━━━━━━━━━━━\n\n"
+    "هر ردیف با شماره مشخص شده. زیر هر دکمه، "
+    "دکمه‌های آبی برای جابه‌جایی همان دکمه هستند:\n\n"
+    "⬆️ = یک ردیف بالاتر برود\n"
+    "⬇️ = یک ردیف پایین‌تر برود\n"
+    "⬅️ ➡️ = چپ و راست در همان ردیف\n"
+    "➕ کنار = بغلِ دکمهٔ بعدی بچسبد\n"
+    "✂️ تنها = از بغلی‌اش جدا شود\n\n"
+    "🔒 «خرید کانفیگ» همیشه اولِ منوست.\n"
+    "✅ هر تغییر، همان لحظه روی منوی کاربر اعمال می‌شود."
 )
 
 
@@ -467,36 +471,56 @@ def _row_label(key):
 
 
 def ui_order_kb():
-    """صفحهٔ چیدمان ردیف‌محور با کنترل‌های کامل."""
+    """صفحهٔ چیدمان — طرح واضح: هر دکمه در یک خط، کنترل‌ها زیرش با برچسب."""
     from keyboards.user_keyboards import get_menu_layout, MAX_PER_ROW
     layout = get_menu_layout()
     rows = []
     nrows = len(layout)
+
+    # شماره‌های فارسی ردیف
+    circ = ["1\u20e3", "2\u20e3", "3\u20e3", "4\u20e3", "5\u20e3",
+            "6\u20e3", "7\u20e3", "8\u20e3", "9\u20e3", "\U0001f51f"]
+
     for ri, row in enumerate(layout):
+        num = circ[ri] if ri < len(circ) else f"({ri+1})"
+        # سرِ ردیف: شماره + نام دکمه‌های داخل این ردیف
+        names = "  +  ".join(_row_label(k) for k in row)
+        rows.append([_btn(f"{num}  {names}", "uiord:noop")])
+
+        # برای هر دکمهٔ داخل ردیف، یک خط کنترلِ برچسب‌دار
         for ci, key in enumerate(row):
-            controls = [_btn(_row_label(key), "uiord:noop")]
-            # بالا/پایین ردیف
-            controls.append(_btn("🔼" if ri > 0 else "▫️",
-                                 f"uiord:up:{key}" if ri > 0 else "uiord:noop"))
-            controls.append(_btn("🔽" if ri < nrows - 1 else "▫️",
-                                 f"uiord:down:{key}" if ri < nrows - 1 else "uiord:noop"))
-            # چپ/راست داخل ردیف (فقط اگر ردیف بیش از یک دکمه دارد)
-            if len(row) > 1 and ci > 0:
-                controls.append(_btn("▶️", f"uiord:right:{key}"))
-            elif len(row) > 1 and ci < len(row) - 1:
-                controls.append(_btn("◀️", f"uiord:left:{key}"))
-            else:
-                controls.append(_btn("▫️", "uiord:noop"))
-            # ادغام با ردیف بعد (اگر جا هست) یا جدا کردن (اگر هم‌ردیف است)
-            if len(row) > 1:
-                controls.append(_btn("✂️", f"uiord:split:{key}"))
+            short = _row_label(key)
+            multi = len(row) > 1
+
+            move = []
+            if ri > 0:
+                move.append(_btn("⬆️ بالا", f"uiord:up:{key}"))
+            if ri < nrows - 1:
+                move.append(_btn("⬇️ پایین", f"uiord:down:{key}"))
+            if move:
+                if multi:
+                    rows.append([_btn("👉 " + short, "uiord:noop"), *move])
+                else:
+                    rows.append(move)
+
+            side = []
+            if multi and ci > 0:
+                side.append(_btn("⬅️ چپ", f"uiord:left:{key}"))
+            if multi and ci < len(row) - 1:
+                side.append(_btn("➡️ راست", f"uiord:right:{key}"))
+            if multi:
+                side.append(_btn("✂️ جدا کن", f"uiord:split:{key}"))
             elif ri < nrows - 1 and len(layout[ri + 1]) < MAX_PER_ROW:
-                controls.append(_btn("🔗", f"uiord:merge:{key}"))
-            else:
-                controls.append(_btn("▫️", "uiord:noop"))
-            rows.append(controls)
-    rows.append([_btn("🔄 بازنشانی چیدمان", "uiord:reset")])
-    rows.append([_btn("⬅️ بازگشت", "ui:home")])
+                side.append(_btn("➕ بچسبان به بعدی", f"uiord:merge:{key}"))
+            if side:
+                rows.append(side)
+
+        # جداکنندهٔ بین ردیف‌ها
+        if ri < nrows - 1:
+            rows.append([_btn("┈┈┈┈┈┈┈┈┈┈", "uiord:noop")])
+
+    rows.append([_btn("🔄 بازگشت به چیدمان پیش‌فرض", "uiord:reset")])
+    rows.append([_btn("⬅️ بازگشت به تنظیمات", "ui:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
