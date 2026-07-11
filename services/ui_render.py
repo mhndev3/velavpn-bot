@@ -81,6 +81,21 @@ async def answer_ui(message, key: str, default: str = "", reply_markup=None, **k
     return await message.answer(text, reply_markup=reply_markup, **kwargs)
 
 
+def render_kwargs(key: str):
+    """
+    برای متن‌هایی که با T() ساخته می‌شوند: اگر آن کلید entity (ایموجی پریمیوم)
+    ذخیره‌شده داشته باشد، آرگومان‌های لازم برای message.answer را برمی‌گرداند
+    تا ایموجی پریمیوم انیمیشنی نمایش داده شود. در غیر این صورت dict خالی.
+
+    استفاده:
+        await msg.answer(text, reply_markup=kb, **render_kwargs("subs_title"))
+    """
+    ents = get_ui_entities(key)
+    if ents:
+        return {"entities": ents, "parse_mode": None}
+    return {}
+
+
 async def answer_photo_ui(message, photo, key: str, default: str = "", reply_markup=None, **kwargs):
     """عکس + کپشنِ قابل‌ویرایش با ایموجی پریمیوم."""
     caption = get_ui_text(key, default)

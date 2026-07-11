@@ -82,9 +82,12 @@ async def start_handler(
         message=message,
         key="start_message",
         fallback_text=(
-            "سلام 👋\n\n"
-            "امروز تمامی خدمات فعال و آماده سرویس‌دهی است."
-        )
+            "سلام {name} 👋\n"
+            "🆔 آیدی شما: {id}\n"
+            "📅 تاریخ: {datetime}\n\n"
+            "از منوی زیر گزینه مورد نظر خود را انتخاب کنید:"
+        ),
+        user=message.from_user,
     )
 
     await send_user_menu(message, message.from_user.id)

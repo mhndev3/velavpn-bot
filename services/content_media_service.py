@@ -79,31 +79,52 @@ def update_content_page(
 async def send_content_page(
     message,
     key: str,
-    fallback_text: str
+    fallback_text: str,
+    user=None
 ):
     page = get_content_page(key)
     text = fallback_text
+
+    # entityهای ذخیره‌شده (ایموجی پریمیوم) برای این کلید
+    from services.ui_render import get_ui_entities
+    ents = get_ui_entities(key)
+    ent_kw = {"entities": ents, "parse_mode": None} if ents else {}
+    cap_kw = {"caption_entities": ents, "parse_mode": None} if ents else {}
 
     if page:
         text = page.get("content") or fallback_text
         file_id = page.get("file_id")
         file_type = page.get("file_type")
 
+        # جایگزینی placeholderها (آیدی، تاریخ شمسی، ساعت و ...)
+        try:
+            from services.placeholders import apply_placeholders
+            text = apply_placeholders(text, user)
+        except Exception:
+            pass
+
         try:
             if file_id and file_type == "photo":
-                await message.answer_photo(photo=file_id, caption=text)
+                await message.answer_photo(photo=file_id, caption=text, **cap_kw)
                 return
 
             if file_id and file_type == "video":
-                await message.answer_video(video=file_id, caption=text)
+                await message.answer_video(video=file_id, caption=text, **cap_kw)
                 return
 
             if file_id and file_type == "document":
-                await message.answer_document(document=file_id, caption=text)
+                await message.answer_document(document=file_id, caption=text, **cap_kw)
                 return
         except Exception:
             pass
 
+    # اطمینان از اعمال placeholder روی متن نهایی (حالت fallback هم)
+    try:
+        from services.placeholders import apply_placeholders
+        text = apply_placeholders(text, user)
+    except Exception:
+        pass
+
     banner_sent = await send_banner(message, key, caption=text)
     if not banner_sent:
-        await message.answer(text)
+        await message.answer(text, **ent_kw)

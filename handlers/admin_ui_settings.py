@@ -64,6 +64,7 @@ SETTINGS_TREE = {
             "banner_faq":           ("بنر سوالات",    ""),
             "banner_subs":          ("بنر کانفیگ‌های من", ""),
             "banner_profile":       ("بنر پنل کاربری", ""),
+            "banner_apps":          ("بنر دریافت برنامه‌ها", ""),
         },
     },
     "emojis": {
@@ -124,9 +125,43 @@ SETTINGS_TREE = {
             "subs_btn_back":     ("دکمهٔ بازگشت", "⬅️ بازگشت"),
         },
     },
+    "apps": {
+        "label": "📲 دریافت برنامه‌ها",
+        "items": {
+            "apps_title":        ("عنوان صفحه", "📲 دریافت برنامه‌ها"),
+            "apps_hint":         ("راهنمای انتخاب سیستم‌عامل", "سیستم‌عامل خود را انتخاب کنید تا برنامه‌های پیشنهادی برای اتصال را دریافت کنید:"),
+            "apps_plat_android": ("دکمهٔ اندروید", "🤖 اندروید"),
+            "apps_plat_windows": ("دکمهٔ ویندوز", "🪟 ویندوز"),
+            "apps_plat_ios":     ("دکمهٔ آیفون", "🍎 آیفون (iOS)"),
+            "apps_plat_mac":     ("دکمهٔ مک", "💻 مک (macOS)"),
+            "apps_list_title":   ("عنوان لیست برنامه‌ها", "📲 برنامه‌های پیشنهادی برای"),
+            "apps_list_hint":    ("راهنمای زیر لیست", "روی هر برنامه بزنید تا به صفحهٔ دانلودش بروید:"),
+            "apps_btn_back":     ("دکمهٔ بازگشت", "⬅️ بازگشت"),
+        },
+    },
+    "buy": {
+        "label": "🛒 خرید و فاکتور",
+        "items": {
+            "buy_name_title":   ("عنوان انتخاب نام", "🏷 <b>نام کانفیگت را انتخاب کن</b>"),
+            "buy_name_hint":    ("راهنمای انتخاب نام", "یک نام دلخواه برای کانفیگت بفرست (فقط حروف انگلیسی، عدد، ـ یا -).\nمثلاً: <code>ali-vpn</code>\n\nیا برای ساخت خودکار، دکمهٔ زیر را بزن:"),
+            "buy_btn_random_name": ("دکمهٔ ساخت نام رندوم", "🎲 ساخت نام رندوم"),
+            "buy_qty_title":    ("عنوان تعداد اکانت", "🔢 <b>چند اکانت می‌خواهی؟</b>"),
+            "buy_qty_hint":     ("راهنمای تعداد", "تعداد اکانت موردنظرت را به عدد بفرست.\nمثلاً: <code>1</code> یا <code>10</code>"),
+            "buy_qty_invalid":  ("خطای عدد نامعتبر", "❌ لطفاً یک عدد معتبر بفرست (مثلاً 1 تا 100)."),
+            "buy_qty_toomany":  ("خطای تعداد زیاد", "❌ حداکثر ۱۰۰ اکانت در هر سفارش. عدد کمتری بفرست."),
+            "buy_btn_back":     ("دکمهٔ بازگشت", "⬅️ بازگشت"),
+        },
+    },
+    "welcome": {
+        "label": "👋 پیام خوش‌آمد",
+        "items": {
+            "txt_welcome": ("متن پیام خوش‌آمد (استفاده از {name} {id} {datetime})",
+                            "سلام {name} 👋\n🆔 آیدی شما: {id}\n📅 تاریخ: {datetime}\n\nبه ربات فروش وی‌پی‌ان خوش اومدی 🚀\nاینجا میتونی به راحتی کانفیگ مورد نظرت رو تهیه کنی و آنلاین استفاده کنی 🔥\nاز منوی زیر گزینه مورد نظرت رو انتخاب کن 👇"),
+        },
+    },
 }
 
-HIDEABLE_BUTTONS = ["btn_wallet", "btn_support", "btn_faq",
+HIDEABLE_BUTTONS = ["btn_wallet", "btn_apps", "btn_support", "btn_faq",
                     "btn_coop", "btn_guide", "btn_cfg_update", "btn_addcfg"]
 
 # نگاشت متن‌های UI به منبعی که ربات واقعاً از آن می‌خواند (content_pages)
@@ -171,12 +206,13 @@ COLOR_CHOICES = [
     ("danger", "🔴 قرمز"),
 ]
 COLOR_NAME = {"": "پیش‌فرض", "primary": "🔵 آبی", "success": "🟢 سبز", "danger": "🔴 قرمز"}
-COLORABLE_BUTTONS = ["btn_buy", "btn_profile", "btn_wallet", "btn_subs", "btn_support", "btn_faq",
+COLORABLE_BUTTONS = ["btn_buy", "btn_profile", "btn_wallet", "btn_subs", "btn_apps", "btn_support", "btn_faq",
                      "btn_coop", "btn_guide", "btn_cfg_update", "btn_addcfg",
                      "btn_admin", "btn_sa_stats", "btn_referral"]
 _BTN_LABELS = {
     "btn_buy": "⚡ خرید کانفیگ", "btn_profile": "👤 پنل کاربری",
     "btn_wallet": "💳 کیف پول", "btn_subs": "📦 اشتراک‌های من",
+    "btn_apps": "📲 دریافت برنامه‌ها",
     "btn_support": "🛟 پشتیبانی", "btn_faq": "❓ سوالات متداول", "btn_coop": "🤝 درخواست همکاری",
     "btn_guide": "📘 راهنمای اتصال", "btn_cfg_update": "🔄 دریافت کانفیگ آپدیت‌شده",
     "btn_addcfg": "➕ افزودن کانفیگ من", "btn_admin": "👑 پنل مدیریت",
@@ -326,6 +362,10 @@ async def ui_save_cb(msg: Message, state: FSMContext):
     # اعمال واقعی متن روی منبعی که ربات از آن می‌خواند
     applied_note = ""
     try:
+        # entityهای ذخیره‌شده (ایموجی پریمیوم) را هم بخوان تا با کلید مقصد کپی شوند
+        from services.ui_render import get_ui_entities
+        _ent_raw = get_setting(key + "__ent", "")
+
         if key in TXT_TO_CONTENT:
             from services.content_media_service import get_content_page, update_content_page
             ckey = TXT_TO_CONTENT[key]
@@ -337,9 +377,13 @@ async def ui_save_cb(msg: Message, state: FSMContext):
                 page.get("file_id"),
                 page.get("file_type"),
             )
+            # entityها را با کلید صفحهٔ محتوا هم ذخیره کن تا هنگام ارسال اعمال شوند
+            set_setting(ckey + "__ent", _ent_raw)
             applied_note = "\n(روی متن واقعی ربات اعمال شد ✅)"
         elif key in TXT_TO_SETTING:
-            set_setting(TXT_TO_SETTING[key], value)
+            skey = TXT_TO_SETTING[key]
+            set_setting(skey, value)
+            set_setting(skey + "__ent", _ent_raw)
             applied_note = "\n(اعمال شد ✅)"
     except Exception:
         pass
@@ -348,6 +392,21 @@ async def ui_save_cb(msg: Message, state: FSMContext):
         f"✅ ذخیره شد:\n<code>{value}</code>{applied_note}",
         reply_markup=back_kb,
     )
+    # تشخیص ایموجی پریمیوم: به ادمین بگو چند entity و از چه نوعی دریافت شد
+    try:
+        ents = msg.entities or []
+        ce = [e for e in ents if str(getattr(e, "type", "")).endswith("custom_emoji")]
+        if ce:
+            ids = ", ".join(str(getattr(e, "custom_emoji_id", "?")) for e in ce)
+            await msg.answer(f"🔎 تشخیص: {len(ce)} ایموجی پریمیوم دریافت شد ✅\nID: <code>{ids}</code>")
+        else:
+            await msg.answer(
+                "🔎 تشخیص: هیچ ایموجی پریمیومی در این متن دریافت نشد.\n"
+                "اگر ایموجی پریمیوم گذاشته بودی و این پیام را می‌بینی، یعنی مشکل از "
+                "دریافت آن است (نه نمایش)."
+            )
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data == "ui:hide_menu")

@@ -25,6 +25,7 @@ router = Router()
 
 class BuyStates(StatesGroup):
     waiting_config_name = State()
+    waiting_quantity = State()
 
 
 def _sanitize_name(raw: str) -> str:
@@ -32,6 +33,25 @@ def _sanitize_name(raw: str) -> str:
     s = (raw or "").strip().replace(" ", "_")
     s = re.sub(r"[^A-Za-z0-9_.\-]", "", s)
     return s[:24]
+
+
+def _random_config_name() -> str:
+    """یک نام تصادفی و تمیز برای کانفیگ می‌سازد."""
+    import random
+    import string
+    return "vpn-" + "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
+
+
+def _name_kb():
+    """کیبورد مرحلهٔ انتخاب نام: دکمهٔ ساخت نام رندوم + بازگشت."""
+    from services.ui_texts import T
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=T("buy_btn_random_name", "🎲 ساخت نام رندوم"),
+                              callback_data="buy:randname")],
+        [InlineKeyboardButton(text=T("buy_btn_back", "⬅️ بازگشت"),
+                              callback_data="u:menu")],
+    ])
 
 
 def _location_label_for_plan(plan: dict) -> str:
@@ -48,20 +68,22 @@ def _location_label_for_plan(plan: dict) -> str:
     return plan.get("service_name") or "استارلینک اختصاصی"
 
 
-def _create_db_order(telegram_id: int, plan: dict, plan_id: int, config_name: str) -> int:
+def _create_db_order(telegram_id: int, plan: dict, plan_id: int, config_name: str, quantity: int = 1) -> int:
     conn = get_connection()
     cur = conn.cursor()
     try:
+        qty = max(1, int(quantity or 1))
+        total = plan["price_toman"] * qty
         cur.execute("""
             INSERT INTO orders
             (telegram_id, plan_id, service_name, plan_title, price_toman,
              duration_days, status, discount_amount, final_price_toman,
-             referral_processed, config_name)
-            VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, 0, ?)
+             referral_processed, config_name, quantity)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, 0, ?, ?)
         """, (
             telegram_id, plan_id, _location_label_for_plan(plan), plan["title"],
-            plan["price_toman"], plan.get("duration_days", 30), plan["price_toman"],
-            config_name or "",
+            total, plan.get("duration_days", 30), total,
+            config_name or "", qty,
         ))
         order_id = cur.lastrowid
         conn.commit()
@@ -619,6 +641,7 @@ async def select_plan_handler(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("buy_plan:"))
 async def buy_plan_from_db(callback: CallbackQuery, state: FSMContext):
     """خرید پلن — ابتدا نام دلخواه کانفیگ از مشتری گرفته می‌شود."""
+    from services.ui_texts import T
     plan_id = int(callback.data.split(":")[1])
     plan = _get_active_plan(plan_id)
     if not plan:
@@ -628,13 +651,40 @@ async def buy_plan_from_db(callback: CallbackQuery, state: FSMContext):
     await state.update_data(buy_plan_id=plan_id)
     await state.set_state(BuyStates.waiting_config_name)
     await callback.message.answer(
-        "🏷 <b>نام کانفیگت را انتخاب کن</b>\n"
+        T("buy_name_title", "🏷 <b>نام کانفیگت را انتخاب کن</b>") + "\n"
         "━━━━━━━━━━━━━━\n\n"
-        "یک نام دلخواه برای کانفیگت بفرست (فقط حروف انگلیسی، عدد، ـ یا -).\n"
-        "مثلاً: <code>ali-vpn</code>\n\n"
-        "اگر نمی‌خواهی نام انتخاب کنی، بنویس: <code>skip</code>"
+        + T("buy_name_hint",
+            "یک نام دلخواه برای کانفیگت بفرست (فقط حروف انگلیسی، عدد، ـ یا -).\n"
+            "مثلاً: <code>ali-vpn</code>\n\n"
+            "یا برای ساخت خودکار، دکمهٔ زیر را بزن:"),
+        reply_markup=_name_kb(),
     )
     await callback.answer()
+
+
+async def _ask_quantity(target, state: FSMContext):
+    """پس از تعیین نام، تعداد اکانت را می‌پرسد."""
+    from services.ui_texts import T
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    await state.set_state(BuyStates.waiting_quantity)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=T("buy_btn_back", "⬅️ بازگشت"), callback_data="u:menu")],
+    ])
+    await target.answer(
+        T("buy_qty_title", "🔢 <b>چند اکانت می‌خواهی؟</b>") + "\n"
+        "━━━━━━━━━━━━━━\n\n"
+        + T("buy_qty_hint", "تعداد اکانت موردنظرت را به عدد بفرست.\nمثلاً: <code>1</code> یا <code>10</code>"),
+        reply_markup=kb,
+    )
+
+
+@router.callback_query(BuyStates.waiting_config_name, F.data == "buy:randname")
+async def buy_random_name(callback: CallbackQuery, state: FSMContext):
+    name = _random_config_name()
+    await state.update_data(config_name=name)
+    await callback.answer("🎲 نام ساخته شد")
+    await callback.message.answer(f"🏷 نام کانفیگ: <code>{name}</code>")
+    await _ask_quantity(callback.message, state)
 
 
 @router.message(BuyStates.waiting_config_name)
@@ -646,27 +696,54 @@ async def buy_config_name(msg: Message, state: FSMContext):
         return
     raw = (msg.text or "").strip()
     config_name = "" if raw.lower() in ("skip", "رد", "-", "بی‌خیال", "بیخیال") else _sanitize_name(raw)
+    await state.update_data(config_name=config_name)
+    await _ask_quantity(msg, state)
+
+
+@router.message(BuyStates.waiting_quantity)
+async def buy_quantity(msg: Message, state: FSMContext):
+    from services.ui_texts import T
+    data = await state.get_data()
+    plan_id = data.get("buy_plan_id")
+    config_name = data.get("config_name", "")
+    if not plan_id:
+        await state.clear()
+        return
+
+    # تبدیل ارقام فارسی به انگلیسی و اعتبارسنجی
+    raw = (msg.text or "").strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+    if not raw.isdigit() or int(raw) < 1:
+        return await msg.answer(T("buy_qty_invalid", "❌ لطفاً یک عدد معتبر بفرست (مثلاً 1 تا 100)."))
+    qty = int(raw)
+    if qty > 100:
+        return await msg.answer(T("buy_qty_toomany", "❌ حداکثر ۱۰۰ اکانت در هر سفارش. عدد کمتری بفرست."))
 
     plan = _get_active_plan(plan_id)
     if not plan:
         await state.clear()
         return await msg.answer("این پلن دیگر موجود نیست.")
 
-    order_id = _create_db_order(msg.from_user.id, plan, plan_id, config_name)
+    order_id = _create_db_order(msg.from_user.id, plan, plan_id, config_name, qty)
     await state.clear()
 
-    price = plan["price_toman"]
+    unit = plan["price_toman"]
+    total = unit * qty
     gb = str(plan["traffic_gb"]) + " GB" if plan.get("traffic_gb") else "نامحدود"
     dur = _dur_label(plan["duration_days"]) if plan.get("duration_days") else "بی‌انقضا"
     name_line = ("🏷 نام کانفیگ: " + config_name + "\n") if config_name else ""
+    qty_block = (
+        "🔢 تعداد: " + "{:,}".format(qty) + " عدد\n"
+        "💵 قیمت واحد: " + "{:,}".format(unit) + " تومان\n"
+    ) if qty > 1 else ""
     text = (
         "✅ سفارش ثبت شد\n"
         "━━━━━━━━━━━━━━\n\n"
-        + name_line +
-        "پلن: " + plan["title"] + "\n"
+        + name_line
+        + "پلن: " + plan["title"] + "\n"
         "حجم: " + gb + "\n"
         "مدت: " + dur + "\n"
-        "قیمت: " + "{:,}".format(price) + " تومان\n\n"
+        + qty_block +
+        "💰 مبلغ قابل پرداخت: " + "{:,}".format(total) + " تومان\n\n"
         "روش پرداخت را انتخاب کنید:"
     )
     await msg.answer(text, reply_markup=payment_methods_for_order_keyboard(order_id))

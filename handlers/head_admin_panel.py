@@ -80,6 +80,7 @@ def head_admin_main_kb():
         [_btn("➕ افزودن پلن", "ha:add_plan"),     _btn("⚙️ تنظیمات بات", "ha:settings")],
         [_btn("👑 مدیریت هد‌ادمین‌ها", "ha:hadmins")],
         [_btn("📢 کانال‌های اجباری", "ha:channels")],
+        [_btn("📲 مدیریت برنامه‌ها", "ha:apps")],
     ])
 
 

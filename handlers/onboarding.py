@@ -115,7 +115,7 @@ async def advance_onboarding(msg: Message, uid: int, state: FSMContext, bot) -> 
     return True
 
 
-async def _finish_and_menu(msg: Message, uid: int, state: FSMContext):
+async def _finish_and_menu(msg: Message, uid: int, state: FSMContext, user=None):
     set_user_field(uid, "onboarding_done", 1)
     await state.clear()
     from handlers.glass_menu import send_user_menu
@@ -126,7 +126,13 @@ async def _finish_and_menu(msg: Message, uid: int, state: FSMContext):
         await send_content_page(
             message=msg,
             key="start_message",
-            fallback_text=("سلام 👋\n\nامروز تمامی خدمات فعال و آماده سرویس‌دهی است."),
+            fallback_text=(
+                "سلام {name} 👋\n"
+                "🆔 آیدی شما: {id}\n"
+                "📅 تاریخ: {datetime}\n\n"
+                "از منوی زیر گزینه مورد نظر خود را انتخاب کنید:"
+            ),
+            user=user,
         )
     except Exception:
         pass
@@ -144,7 +150,7 @@ async def onb_checkjoin(cb: CallbackQuery, state: FSMContext):
         pass
     done = await advance_onboarding(cb.message, cb.from_user.id, state, cb.bot)
     if done:
-        await _finish_and_menu(cb.message, cb.from_user.id, state)
+        await _finish_and_menu(cb.message, cb.from_user.id, state, user=cb.from_user)
 
 
 @router.callback_query(F.data == "onb:accept_rules")
@@ -157,7 +163,7 @@ async def onb_accept_rules(cb: CallbackQuery, state: FSMContext):
         pass
     done = await advance_onboarding(cb.message, cb.from_user.id, state, cb.bot)
     if done:
-        await _finish_and_menu(cb.message, cb.from_user.id, state)
+        await _finish_and_menu(cb.message, cb.from_user.id, state, user=cb.from_user)
 
 
 @router.message(F.contact)
@@ -170,7 +176,7 @@ async def onb_contact(msg: Message, state: FSMContext):
     set_user_field(msg.from_user.id, "phone", phone)
     done = await advance_onboarding(msg, msg.from_user.id, state, msg.bot)
     if done:
-        await _finish_and_menu(msg, msg.from_user.id, state)
+        await _finish_and_menu(msg, msg.from_user.id, state, user=msg.from_user)
 
 
 @router.message(OnboardingStates.waiting_username)
@@ -179,7 +185,7 @@ async def onb_username(msg: Message, state: FSMContext):
     if not uname or len(uname) > 32:
         return await msg.answer("❌ نام کاربری نامعتبر است. یک نام کوتاه‌تر بفرست.")
     set_user_field(msg.from_user.id, "custom_username", uname)
-    await _finish_and_menu(msg, msg.from_user.id, state)
+    await _finish_and_menu(msg, msg.from_user.id, state, user=msg.from_user)
 
 
 # ── Middleware: عضویت اجباری کانال برای همه (حتی کاربران قدیمی) ──
