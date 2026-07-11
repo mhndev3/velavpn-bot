@@ -47,9 +47,11 @@
 ### 👑 For Admins
 - **Three-tier roles** — user / sub-admin / head-admin
 - **Full UI customization** — every text, emoji, banner & button
+- **Drag-free menu layout** — reorder buttons & rows from the panel
 - **Premium (animated) emoji** support in messages
 - **Forced channel join** — add/remove channels live
 - **Plan editor** — price, volume, duration, location
+- **Automated backups** — bot DB **and** every X-UI panel DB
 - **Death Note dev panel** — stop / start / lockdown the bot
 
 </td>
@@ -97,6 +99,33 @@ sequenceDiagram
     X-->>B: real serving domain
     B-->>U: 📸 QR + 🔗 link (single message)
 ```
+
+---
+
+## 🎨 Live Menu Layout
+
+Admins reshape the customer keyboard from inside Telegram — no code, no restart. Each button carries inline controls to move its **row** up/down, shift it **left/right** within a row, and **merge** or **split** rows.
+
+```mermaid
+flowchart TD
+    subgraph Panel["↕️ Layout editor"]
+        direction TB
+        P1["👤 Profile   🔼 🔽 ▶️ ✂️"]
+        P2["💳 Wallet    🔼 🔽 ◀️ ✂️"]
+        P3["📦 Configs   🔼 🔽 ▫️ 🔗"]
+    end
+    subgraph Menu["📱 Customer menu"]
+        direction TB
+        M0["⚡ Buy (pinned)"]
+        M1["👤 Profile | 💳 Wallet"]
+        M2["📦 Configs"]
+    end
+    Panel -- "saved as menu_layout" --> Menu
+
+    style M0 fill:#00D9FF,stroke:#0891b2,color:#000
+```
+
+The layout is persisted as a compact string (`a,b|c|d,e` — `|` separates rows, `,` separates buttons in a row) and falls back gracefully to the default two-per-row grid on existing installs.
 
 ---
 
@@ -195,10 +224,12 @@ Schema migrations run automatically on boot, so a plain restart is enough.
 | Section | What you can change |
 |---|---|
 | 🎨 **UI Settings** | Every user-facing text, emoji, banner and button label — live, no restart |
+| ↕️ **Menu Layout** | Reorder buttons, move left/right, merge & split rows — applied instantly |
 | 🖥 **Servers** | Add 3x-ui panels, test connections, list inbounds, override domain |
 | 📦 **Plans** | Create & **edit** plans: price, volume, duration, location |
 | 📢 **Channels** | Forced-join channels (add via `@username`, link, or forward) |
 | 👑 **Head Admins** | Grant/revoke full panel access by numeric ID |
+| 🗄 **Backups** | One-tap full backup (bot + all panels) delivered in Telegram |
 | ⚙️ **Bot Settings** | Card number, referral %, glass-button mode, DB download |
 | 💀 **`/deathnote`** | Developer-only: `Stop` · `Start` · `L` (lockdown) · `K` (unlock) |
 
@@ -211,6 +242,8 @@ Schema migrations run automatically on boot, so a plain restart is enough.
 - [x] Premium (animated) emoji in bot messages
 - [x] Forced channel join + full onboarding gate
 - [x] Live usage stats & percentage bars
+- [x] In-panel menu layout editor (reorder / merge / split)
+- [x] Automated X-UI panel database backups
 - [ ] **Telegram Mini App** — fully styled UI with real button colors
 - [ ] Cross-platform client (Flutter + Xray-core)
 - [ ] Advanced analytics dashboard

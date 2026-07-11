@@ -155,6 +155,7 @@ def is_hidden(key: str) -> bool:
 def ui_home_kb():
     rows = [[_btn(cat["label"], f"ui:cat:{k}")] for k, cat in SETTINGS_TREE.items()]
     rows.append([_btn("🎨 رنگ دکمه‌ها", "ui:colors")])
+    rows.append([_btn("↕️ چیدمان دکمه‌ها", "ui:order")])
     rows.append([_btn("🙈 پنهان کردن دکمه‌ها", "ui:hide_menu")])
     rows.append([_btn("💾 دانلود دیتابیس", "ui:download_db")])
     rows.append([_btn("🔄 بازنشانی همه", "ui:reset_all")])
@@ -443,3 +444,183 @@ async def ui_download_db_cb(cb: CallbackQuery):
         document=FSInputFile(str(db_path), filename=f"backup_{stamp}.db"),
         caption=f"💾 بکاپ دیتابیس\n📅 {stamp}"
     )
+
+
+# ─── چیدمان دکمه‌ها (ردیف‌محور: بالا/پایین + چپ/راست + ادغام/جدا) ───
+_ORDER_TITLE = (
+    "↕️ چیدمان دکمه‌های منو\n\n"
+    "🔼🔽 جابه‌جایی ردیف بالا/پایین\n"
+    "◀️▶️ جابه‌جایی در همان ردیف\n"
+    "🔗 هم‌ردیف کردن با ردیف بعد\n"
+    "✂️ جدا کردن به ردیف تازه\n\n"
+    "«⚡ خرید کانفیگ» همیشه اول و ثابت است.\n"
+    "تغییرات فوراً روی منوی کاربران اعمال می‌شود."
+)
+
+
+def _row_label(key):
+    from keyboards.user_keyboards import DEFAULT_MENU_ORDER
+    lbl = get_ui(key) or _BTN_LABELS.get(key, key)
+    if len(lbl) > 18:
+        lbl = lbl[:18] + "…"
+    return lbl
+
+
+def ui_order_kb():
+    """صفحهٔ چیدمان ردیف‌محور با کنترل‌های کامل."""
+    from keyboards.user_keyboards import get_menu_layout, MAX_PER_ROW
+    layout = get_menu_layout()
+    rows = []
+    nrows = len(layout)
+    for ri, row in enumerate(layout):
+        for ci, key in enumerate(row):
+            controls = [_btn(_row_label(key), "uiord:noop")]
+            # بالا/پایین ردیف
+            controls.append(_btn("🔼" if ri > 0 else "▫️",
+                                 f"uiord:up:{key}" if ri > 0 else "uiord:noop"))
+            controls.append(_btn("🔽" if ri < nrows - 1 else "▫️",
+                                 f"uiord:down:{key}" if ri < nrows - 1 else "uiord:noop"))
+            # چپ/راست داخل ردیف (فقط اگر ردیف بیش از یک دکمه دارد)
+            if len(row) > 1 and ci > 0:
+                controls.append(_btn("▶️", f"uiord:right:{key}"))
+            elif len(row) > 1 and ci < len(row) - 1:
+                controls.append(_btn("◀️", f"uiord:left:{key}"))
+            else:
+                controls.append(_btn("▫️", "uiord:noop"))
+            # ادغام با ردیف بعد (اگر جا هست) یا جدا کردن (اگر هم‌ردیف است)
+            if len(row) > 1:
+                controls.append(_btn("✂️", f"uiord:split:{key}"))
+            elif ri < nrows - 1 and len(layout[ri + 1]) < MAX_PER_ROW:
+                controls.append(_btn("🔗", f"uiord:merge:{key}"))
+            else:
+                controls.append(_btn("▫️", "uiord:noop"))
+            rows.append(controls)
+    rows.append([_btn("🔄 بازنشانی چیدمان", "uiord:reset")])
+    rows.append([_btn("⬅️ بازگشت", "ui:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _rerender_order(cb, toast=None):
+    try:
+        await cb.message.edit_text(_ORDER_TITLE, reply_markup=ui_order_kb())
+    except Exception:
+        pass
+    await cb.answer(toast or "")
+
+
+def _find(layout, key):
+    for ri, row in enumerate(layout):
+        if key in row:
+            return ri, row.index(key)
+    return None, None
+
+
+@router.callback_query(F.data == "ui:order")
+async def ui_order_cb(cb: CallbackQuery):
+    if cb.from_user.id not in ADMIN_IDS:
+        return
+    await cb.message.edit_text(_ORDER_TITLE, reply_markup=ui_order_kb())
+    await cb.answer()
+
+
+@router.callback_query(F.data == "uiord:noop")
+async def ui_order_noop(cb: CallbackQuery):
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("uiord:up:"))
+async def ui_order_up(cb: CallbackQuery):
+    if cb.from_user.id not in ADMIN_IDS:
+        return
+    from keyboards.user_keyboards import get_menu_layout, save_menu_layout
+    key = cb.data.split(":", 2)[2]
+    layout = get_menu_layout()
+    ri, ci = _find(layout, key)
+    if ri is not None and ri > 0:
+        layout[ri - 1], layout[ri] = layout[ri], layout[ri - 1]
+        save_menu_layout(layout)
+    await _rerender_order(cb, "⬆️ ردیف بالا رفت")
+
+
+@router.callback_query(F.data.startswith("uiord:down:"))
+async def ui_order_down(cb: CallbackQuery):
+    if cb.from_user.id not in ADMIN_IDS:
+        return
+    from keyboards.user_keyboards import get_menu_layout, save_menu_layout
+    key = cb.data.split(":", 2)[2]
+    layout = get_menu_layout()
+    ri, ci = _find(layout, key)
+    if ri is not None and ri < len(layout) - 1:
+        layout[ri + 1], layout[ri] = layout[ri], layout[ri + 1]
+        save_menu_layout(layout)
+    await _rerender_order(cb, "⬇️ ردیف پایین رفت")
+
+
+@router.callback_query(F.data.startswith("uiord:left:"))
+async def ui_order_left(cb: CallbackQuery):
+    if cb.from_user.id not in ADMIN_IDS:
+        return
+    from keyboards.user_keyboards import get_menu_layout, save_menu_layout
+    key = cb.data.split(":", 2)[2]
+    layout = get_menu_layout()
+    ri, ci = _find(layout, key)
+    if ri is not None and ci > 0:
+        layout[ri][ci - 1], layout[ri][ci] = layout[ri][ci], layout[ri][ci - 1]
+        save_menu_layout(layout)
+    await _rerender_order(cb, "◀️ جابه‌جا شد")
+
+
+@router.callback_query(F.data.startswith("uiord:right:"))
+async def ui_order_right(cb: CallbackQuery):
+    if cb.from_user.id not in ADMIN_IDS:
+        return
+    from keyboards.user_keyboards import get_menu_layout, save_menu_layout
+    key = cb.data.split(":", 2)[2]
+    layout = get_menu_layout()
+    ri, ci = _find(layout, key)
+    if ri is not None and ci < len(layout[ri]) - 1:
+        layout[ri][ci + 1], layout[ri][ci] = layout[ri][ci], layout[ri][ci + 1]
+        save_menu_layout(layout)
+    await _rerender_order(cb, "▶️ جابه‌جا شد")
+
+
+@router.callback_query(F.data.startswith("uiord:merge:"))
+async def ui_order_merge(cb: CallbackQuery):
+    """این دکمه (که تنها در ردیف خودش است) با ردیف بعد هم‌ردیف می‌شود."""
+    if cb.from_user.id not in ADMIN_IDS:
+        return
+    from keyboards.user_keyboards import get_menu_layout, save_menu_layout, MAX_PER_ROW
+    key = cb.data.split(":", 2)[2]
+    layout = get_menu_layout()
+    ri, ci = _find(layout, key)
+    if ri is not None and ri < len(layout) - 1 and len(layout[ri + 1]) < MAX_PER_ROW:
+        # دکمه را از ردیف خودش بردار و ابتدای ردیف بعد بگذار
+        layout[ri].remove(key)
+        layout[ri + 1].insert(0, key)
+        layout = [r for r in layout if r]
+        save_menu_layout(layout)
+    await _rerender_order(cb, "🔗 هم‌ردیف شد")
+
+
+@router.callback_query(F.data.startswith("uiord:split:"))
+async def ui_order_split(cb: CallbackQuery):
+    """این دکمه از ردیفِ مشترک جدا و به ردیف تازهٔ خودش می‌رود."""
+    if cb.from_user.id not in ADMIN_IDS:
+        return
+    from keyboards.user_keyboards import get_menu_layout, save_menu_layout
+    key = cb.data.split(":", 2)[2]
+    layout = get_menu_layout()
+    ri, ci = _find(layout, key)
+    if ri is not None and len(layout[ri]) > 1:
+        layout[ri].remove(key)
+        layout.insert(ri + 1, [key])
+        save_menu_layout(layout)
+    await _rerender_order(cb, "✂️ جدا شد")
+
+
+@router.callback_query(F.data == "uiord:reset")
+async def ui_order_reset(cb: CallbackQuery):
+    if cb.from_user.id not in ADMIN_IDS:
+        return
+    set_setting("menu_layout", "")
+    await _rerender_order(cb, "🔄 چیدمان پیش‌فرض شد")

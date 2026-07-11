@@ -22,6 +22,81 @@ def _hidden(key):
         return False
 
 
+# ترتیب پیش‌فرض دکمه‌های منوی اصلی (btn_buy همیشه اول و تنهاست)
+DEFAULT_MENU_ORDER = [
+    "btn_profile", "btn_wallet", "btn_subs", "btn_support",
+    "btn_faq", "btn_coop", "btn_guide", "btn_cfg_update", "btn_addcfg",
+]
+
+
+def get_menu_order():
+    """ترتیب دکمه‌ها را از تنظیمات می‌خواند (کلید menu_order = لیست جداشده با کاما)."""
+    try:
+        from database.db import get_setting
+        raw = get_setting("menu_order", "")
+        if raw:
+            saved = [k.strip() for k in raw.split(",") if k.strip()]
+            # فقط کلیدهای معتبر، و افزودن هر کلید جدیدی که در تنظیمات نبوده
+            order = [k for k in saved if k in DEFAULT_MENU_ORDER]
+            for k in DEFAULT_MENU_ORDER:
+                if k not in order:
+                    order.append(k)
+            return order
+    except Exception:
+        pass
+    return list(DEFAULT_MENU_ORDER)
+
+
+MAX_PER_ROW = 2  # سقف دکمه در هر ردیف (محدودیت عرض تلگرام)
+
+
+def get_menu_layout():
+    """
+    چیدمان ردیف‌محور دکمه‌ها را برمی‌گرداند: لیستی از ردیف‌ها که هر ردیف
+    لیستی از کلیدهاست. مثال: [["btn_profile","btn_wallet"], ["btn_subs"]]
+
+    منبع: کلید تنظیمات menu_layout با قالب  row1a,row1b|row2a|row3a,row3b
+    اگر ثبت نشده باشد، از ترتیب قدیمی (menu_order) به‌صورت دوتایی ساخته می‌شود
+    تا با نصب‌های قبلی سازگار بماند.
+    """
+    valid = set(DEFAULT_MENU_ORDER)
+    try:
+        from database.db import get_setting
+        raw = get_setting("menu_layout", "")
+    except Exception:
+        raw = ""
+
+    if raw:
+        rows = []
+        seen = set()
+        for part in raw.split("|"):
+            row = [k.strip() for k in part.split(",") if k.strip() in valid and k.strip() not in seen]
+            for k in row:
+                seen.add(k)
+            if row:
+                rows.append(row[:MAX_PER_ROW])
+        # هر کلید معتبری که در layout نبود، ته لیست به‌صورت تک‌ردیف اضافه شود
+        for k in DEFAULT_MENU_ORDER:
+            if k not in seen:
+                rows.append([k])
+        if rows:
+            return rows
+
+    # fallback: از ترتیب تخت، دوتا-دوتا
+    flat = get_menu_order()
+    return [flat[i:i + 2] for i in range(0, len(flat), 2)]
+
+
+def save_menu_layout(rows):
+    """چیدمان ردیف‌محور را ذخیره می‌کند."""
+    try:
+        from database.db import set_setting
+        parts = [",".join(r) for r in rows if r]
+        set_setting("menu_layout", "|".join(parts))
+    except Exception:
+        pass
+
+
 # رنگ‌های مجاز تلگرام برای دکمه (Bot API 9.4+): primary=آبی، success=سبز، danger=قرمز
 _VALID_COLORS = ("primary", "success", "danger")
 
@@ -61,34 +136,26 @@ def main_menu_keyboard_for(telegram_id: int):
         is_head_admin = False
         is_sub_admin = False
 
-    # دکمه‌های مشترک همه (به‌جز دعوت دوستان و پنل)
-    COMMON_BTNS = [
-        ("btn_buy",     "⚡ خرید کانفیگ"),
-        ("btn_profile", "👤 پنل کاربری"),
-        ("btn_wallet",  "💳 کیف پول"),
-        ("btn_subs",    "📦 اشتراک‌های من"),
-        ("btn_support", "🛟 پشتیبانی"),
-        ("btn_faq",     "❓ سوالات متداول"),
-        ("btn_coop",    "🤝 درخواست همکاری"),
-        ("btn_guide",   "📘 راهنمای اتصال"),
-        ("btn_cfg_update", "🔄 دریافت کانفیگ آپدیت‌شده"),
-        ("btn_addcfg",  "➕ افزودن کانفیگ من"),
-    ]
+    # عنوان‌های پیش‌فرض دکمه‌ها
+    LABELS = {
+        "btn_buy": "⚡ خرید کانفیگ", "btn_profile": "👤 پنل کاربری",
+        "btn_wallet": "💳 کیف پول", "btn_subs": "📦 اشتراک‌های من",
+        "btn_support": "🛟 پشتیبانی", "btn_faq": "❓ سوالات متداول",
+        "btn_coop": "🤝 درخواست همکاری", "btn_guide": "📘 راهنمای اتصال",
+        "btn_cfg_update": "🔄 دریافت کانفیگ آپدیت‌شده", "btn_addcfg": "➕ افزودن کانفیگ من",
+    }
 
     keyboard = []
 
-    # دکمه خرید همیشه تنهاست
-    first_key, first_default = COMMON_BTNS[0]
-    if not _hidden(first_key):
-        keyboard.append([_kb(first_key, first_default)])
+    # دکمه خرید همیشه اول و تنهاست
+    if not _hidden("btn_buy"):
+        keyboard.append([_kb("btn_buy", LABELS["btn_buy"])])
 
-    # بقیه دوتایی
-    rest = [(k, d) for k, d in COMMON_BTNS[1:] if not _hidden(k)]
-    for i in range(0, len(rest), 2):
-        row = [_kb(rest[i][0], rest[i][1])]
-        if i + 1 < len(rest):
-            row.append(_kb(rest[i + 1][0], rest[i + 1][1]))
-        keyboard.append(row)
+    # بقیه بر اساس چیدمان ردیف‌محور دلخواه ادمین
+    for row_keys in get_menu_layout():
+        row = [_kb(k, LABELS[k]) for k in row_keys if not _hidden(k)]
+        if row:
+            keyboard.append(row)
 
     # ردیف آخر: بر اساس نقش کاربر
     if is_head_admin:
@@ -134,30 +201,31 @@ def main_menu_inline_for(telegram_id: int):
     except Exception:
         is_sub_admin = False
 
-    COMMON = [
-        ("btn_buy",        "⚡ خرید کانفیگ",           "menu:buy"),
-        ("btn_profile",    "👤 پنل کاربری",            "menu:profile"),
-        ("btn_wallet",     "💳 کیف پول",              "menu:wallet"),
-        ("btn_subs",       "📦 اشتراک‌های من",         "menu:subs"),
-        ("btn_support",    "🛟 پشتیبانی",             "menu:support"),
-        ("btn_faq",        "❓ سوالات متداول",         "menu:faq"),
-        ("btn_coop",       "🤝 درخواست همکاری",        "menu:coop"),
-        ("btn_guide",      "📘 راهنمای اتصال",         "menu:guide"),
-        ("btn_cfg_update", "🔄 دریافت کانفیگ آپدیت‌شده", "menu:cfg_update"),
-        ("btn_addcfg",     "➕ افزودن کانفیگ من",      "menu:addcfg"),
-    ]
+    CALLBACKS = {
+        "btn_buy": "menu:buy", "btn_profile": "menu:profile", "btn_wallet": "menu:wallet",
+        "btn_subs": "menu:subs", "btn_support": "menu:support", "btn_faq": "menu:faq",
+        "btn_coop": "menu:coop", "btn_guide": "menu:guide",
+        "btn_cfg_update": "menu:cfg_update", "btn_addcfg": "menu:addcfg",
+    }
+    LABELS = {
+        "btn_buy": "⚡ خرید کانفیگ", "btn_profile": "👤 پنل کاربری",
+        "btn_wallet": "💳 کیف پول", "btn_subs": "📦 اشتراک‌های من",
+        "btn_support": "🛟 پشتیبانی", "btn_faq": "❓ سوالات متداول",
+        "btn_coop": "🤝 درخواست همکاری", "btn_guide": "📘 راهنمای اتصال",
+        "btn_cfg_update": "🔄 دریافت کانفیگ آپدیت‌شده", "btn_addcfg": "➕ افزودن کانفیگ من",
+    }
 
     rows = []
-    first = COMMON[0]
-    if not _hidden(first[0]):
-        rows.append([InlineKeyboardButton(text=_get(first[0], first[1]), callback_data=first[2])])
+    if not _hidden("btn_buy"):
+        rows.append([InlineKeyboardButton(text=_get("btn_buy", LABELS["btn_buy"]), callback_data="menu:buy")])
 
-    rest = [(k, d, c) for k, d, c in COMMON[1:] if not _hidden(k)]
-    for i in range(0, len(rest), 2):
-        row = [InlineKeyboardButton(text=_get(rest[i][0], rest[i][1]), callback_data=rest[i][2])]
-        if i + 1 < len(rest):
-            row.append(InlineKeyboardButton(text=_get(rest[i + 1][0], rest[i + 1][1]), callback_data=rest[i + 1][2]))
-        rows.append(row)
+    for row_keys in get_menu_layout():
+        row = [
+            InlineKeyboardButton(text=_get(k, LABELS[k]), callback_data=CALLBACKS[k])
+            for k in row_keys if not _hidden(k)
+        ]
+        if row:
+            rows.append(row)
 
     if is_sub_admin:
         rows.append([InlineKeyboardButton(text=_get("btn_sa_stats", "📊 آمار فروش من"), callback_data="menu:sa_stats")])
