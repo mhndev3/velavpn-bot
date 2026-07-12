@@ -18,6 +18,9 @@ def run_migrations():
         "ALTER TABLE orders ADD COLUMN config_name TEXT DEFAULT ''",
         # orders: تعداد اکانت خریداری‌شده در یک سفارش
         "ALTER TABLE orders ADD COLUMN quantity INTEGER DEFAULT 1",
+        # orders: تمدید — ایمیل و سرورِ اکانتی که این سفارش شارژش می‌کند
+        "ALTER TABLE orders ADD COLUMN renew_email TEXT DEFAULT ''",
+        "ALTER TABLE orders ADD COLUMN renew_server_id INTEGER DEFAULT 0",
         # xui_servers: دامنهٔ دستی برای ساخت لینک کانفیگ (مستقل از پنل)
         "ALTER TABLE xui_servers ADD COLUMN domain TEXT DEFAULT ''",
         # onboarding: شماره تلفن، نام کاربری دلخواه، پذیرش قوانین، تکمیل ثبت‌نام

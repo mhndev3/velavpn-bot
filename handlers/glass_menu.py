@@ -32,6 +32,7 @@ _DISPATCH = {
     "profile":    ("handlers.wallet", "profile_entry", False),
     "wallet":     ("handlers.wallet", "wallet_entry", False),
     "subs":       ("handlers.user_extra", "my_subscriptions", False),
+    "renew":      ("handlers.user_renew", "renew_entry", False),
     "apps":       ("handlers.user_apps", "apps_entry", False),
     "support":    ("handlers.user_ticket", "support_handler", True),
     "faq":        ("handlers.user_menu", "faq_handler", False),

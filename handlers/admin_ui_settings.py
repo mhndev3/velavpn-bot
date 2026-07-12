@@ -33,6 +33,8 @@ SETTINGS_TREE = {
             "btn_profile":  ("👤 پنل کاربری",        "👤 پنل کاربری"),
             "btn_wallet":   ("💳 کیف پول",           "💳 کیف پول"),
             "btn_subs":     ("📦 اشتراک‌های من",     "📦 اشتراک‌های من"),
+            "btn_renew":    ("♻️ تمدید اشتراک",      "♻️ تمدید اشتراک"),
+            "btn_apps":     ("📲 دریافت برنامه‌ها",   "📲 دریافت برنامه‌ها"),
             "btn_support":  ("🛟 پشتیبانی",          "🛟 پشتیبانی"),
             "btn_faq":      ("❓ سوالات متداول",      "❓ سوالات متداول"),
             "btn_coop":     ("🤝 درخواست همکاری",     "🤝 درخواست همکاری"),
@@ -65,6 +67,7 @@ SETTINGS_TREE = {
             "banner_subs":          ("بنر کانفیگ‌های من", ""),
             "banner_profile":       ("بنر پنل کاربری", ""),
             "banner_apps":          ("بنر دریافت برنامه‌ها", ""),
+            "banner_renew":         ("بنر تمدید اشتراک", ""),
         },
     },
     "emojis": {
@@ -167,9 +170,25 @@ SETTINGS_TREE = {
                             "سلام {name} 👋\n🆔 آیدی شما: {id}\n📅 تاریخ: {datetime}\n\nبه ربات فروش وی‌پی‌ان خوش اومدی 🚀\nاینجا میتونی به راحتی کانفیگ مورد نظرت رو تهیه کنی و آنلاین استفاده کنی 🔥\nاز منوی زیر گزینه مورد نظرت رو انتخاب کن 👇"),
         },
     },
+    "renew": {
+        "label": "♻️ تمدید اشتراک",
+        "items": {
+            "rnw_title":        ("عنوان صفحه", "♻️ تمدید اشتراک"),
+            "rnw_pick_account": ("راهنمای انتخاب کانفیگ", "کدام کانفیگ را می‌خواهید شارژ/تمدید کنید؟"),
+            "rnw_pick_duration":("راهنمای انتخاب مدت", "مدت تمدید را انتخاب کنید:"),
+            "rnw_pick_volume":  ("راهنمای انتخاب حجم", "حجم موردنظر برای تمدید را انتخاب کنید:"),
+            "rnw_empty":        ("متن نداشتن اکانت", "شما اکانتی برای تمدید ندارید.\nابتدا یک کانفیگ خریداری کنید."),
+            "rnw_no_plans":     ("متن نبودن پلن", "برای سرور این اکانت پلنی فعال نیست."),
+            "rnw_invoice_title":("عنوان فاکتور تمدید", "🧾 فاکتور تمدید"),
+            "rnw_invoice_hint": ("راهنمای فاکتور", "حجم و مدت پس از پرداخت، به اکانت فعلی شما اضافه می‌شود.\nروش پرداخت را انتخاب کنید:"),
+            "rnw_done_title":   ("عنوان پیام موفقیت", "✅ تمدید انجام شد"),
+            "rnw_done_hint":    ("راهنمای پس از تمدید", "لینک کانفیگ شما تغییری نکرده و همان قبلی است. ✅"),
+            "rnw_btn_back":     ("دکمهٔ بازگشت", "⬅️ بازگشت"),
+        },
+    },
 }
 
-HIDEABLE_BUTTONS = ["btn_wallet", "btn_apps", "btn_support", "btn_faq",
+HIDEABLE_BUTTONS = ["btn_wallet", "btn_apps", "btn_renew", "btn_support", "btn_faq",
                     "btn_coop", "btn_guide", "btn_cfg_update", "btn_addcfg"]
 
 # نگاشت متن‌های UI به منبعی که ربات واقعاً از آن می‌خواند (content_pages)
@@ -214,12 +233,13 @@ COLOR_CHOICES = [
     ("danger", "🔴 قرمز"),
 ]
 COLOR_NAME = {"": "پیش‌فرض", "primary": "🔵 آبی", "success": "🟢 سبز", "danger": "🔴 قرمز"}
-COLORABLE_BUTTONS = ["btn_buy", "btn_profile", "btn_wallet", "btn_subs", "btn_apps", "btn_support", "btn_faq",
+COLORABLE_BUTTONS = ["btn_buy", "btn_profile", "btn_wallet", "btn_subs", "btn_renew", "btn_apps", "btn_support", "btn_faq",
                      "btn_coop", "btn_guide", "btn_cfg_update", "btn_addcfg",
                      "btn_admin", "btn_sa_stats", "btn_referral"]
 _BTN_LABELS = {
     "btn_buy": "⚡ خرید کانفیگ", "btn_profile": "👤 پنل کاربری",
     "btn_wallet": "💳 کیف پول", "btn_subs": "📦 اشتراک‌های من",
+    "btn_renew": "♻️ تمدید اشتراک",
     "btn_apps": "📲 دریافت برنامه‌ها",
     "btn_support": "🛟 پشتیبانی", "btn_faq": "❓ سوالات متداول", "btn_coop": "🤝 درخواست همکاری",
     "btn_guide": "📘 راهنمای اتصال", "btn_cfg_update": "🔄 دریافت کانفیگ آپدیت‌شده",

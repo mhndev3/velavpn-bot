@@ -234,6 +234,101 @@ class XUIClient:
                     continue
         return _ok(None) if any_ok else None
 
+    async def _find_client_raw(self, email: str):
+        """
+        کلاینت را در اینباندها پیدا می‌کند و (inbound_id, client_dict, stats) را برمی‌گرداند.
+        client_dict همان تنظیمات ذخیره‌شدهٔ کلاینت (id/subId/flow/...) است.
+        """
+        target = (email or "").strip()
+        inbounds = await self.get_inbounds()
+        for ib in inbounds:
+            try:
+                settings = self._parse(ib.get("settings", {}))
+                for cl in (settings.get("clients") or []):
+                    if str(cl.get("email", "")).strip() == target:
+                        # آمار مصرف/انقضای فعلی از clientStats
+                        st = None
+                        for s in (ib.get("clientStats") or []):
+                            if str(s.get("email", "")).strip() == target:
+                                st = s
+                                break
+                        return ib.get("id"), cl, st
+            except Exception:
+                continue
+        return None, None, None
+
+    async def renew_client(self, email: str, add_traffic_gb: int, add_days: int):
+        """
+        تمدید کلاینت موجود: حجم و زمانِ جدید را به مقادیر فعلی «اضافه» می‌کند.
+
+        قواعد (طبق خواستهٔ کارفرما):
+        - حجم جدید = حجم کل فعلی + حجم خریداری‌شده (اگر نامحدود بود، نامحدود می‌ماند).
+        - زمان: اگر هنوز اعتبار دارد → به تاریخ انقضای فعلی اضافه می‌شود؛
+          اگر منقضی شده یا انقضا ندارد → از «حالا» + مدت جدید.
+        - اگر مصرف حجم به سقف رسیده و کاربر شارژ می‌کند، چون totalGB بالا می‌رود،
+          اکانت دوباره فعال می‌شود.
+        """
+        s = await self._sess()
+        await self._refresh_csrf()
+
+        ib_id, client, st = await self._find_client_raw(email)
+        if not client or ib_id is None:
+            return None
+
+        now_ms = int(datetime.now().timestamp() * 1000)
+
+        # ── حجم: افزودن به totalGB فعلی ──
+        cur_total = int(client.get("totalGB", 0) or 0)
+        add_bytes = int(add_traffic_gb) * 1024 ** 3 if add_traffic_gb else 0
+        if cur_total <= 0:
+            # نامحدود بود → نامحدود می‌ماند
+            new_total = 0
+        else:
+            new_total = cur_total + add_bytes
+
+        # ── زمان: افزودن به انقضای فعلی یا از حالا ──
+        cur_exp = int(client.get("expiryTime", 0) or 0)
+        add_ms = int(add_days) * 24 * 3600 * 1000 if add_days else 0
+        if add_ms == 0:
+            new_exp = cur_exp  # بدون تغییر زمان
+        elif cur_exp and cur_exp > now_ms:
+            new_exp = cur_exp + add_ms      # هنوز اعتبار دارد → اضافه به انقضا
+        else:
+            new_exp = now_ms + add_ms        # منقضی/بی‌انقضا → از حالا
+
+        # کلاینت به‌روزشده
+        updated = dict(client)
+        updated["totalGB"] = new_total
+        updated["expiryTime"] = new_exp
+        updated["enable"] = True
+        cid = updated.get("id") or ""
+
+        # ── روش v3+: updateClient با uuid کلاینت ──
+        try:
+            payload = {"id": ib_id, "settings": json.dumps({"clients": [updated]})}
+            for ep in [f"/panel/api/inbounds/updateClient/{cid}",
+                       f"/xui/inbound/updateClient/{cid}",
+                       f"/panel/inbound/updateClient/{cid}"]:
+                try:
+                    r = await s.post(f"{self.base_url}{ep}",
+                                     data=urllib.parse.urlencode(payload),
+                                     headers=self._h_form())
+                    if r.status == 200:
+                        d = await r.json()
+                        if d.get("success"):
+                            # اگر حجم به سقف رسیده بود، مصرف را صفر نکن؛ فقط سقف بالا رفته کافی است.
+                            return {
+                                "email": email,
+                                "new_total_gb": (round(new_total / 1024 ** 3, 2) if new_total else 0),
+                                "new_expiry": (datetime.fromtimestamp(new_exp / 1000).strftime("%Y-%m-%d")
+                                               if new_exp else "نامحدود"),
+                            }
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return None
+
     async def get_client_stats(self, email: str):
         target = (email or "").strip()
         # روش اصلی: clientStats داخل اینباندها (سازگار با نسخهٔ فعلی پنل که getClientTraffics ندارد)
@@ -517,5 +612,23 @@ async def get_account_stats(email: str, server_id: int):
         if not ok:
             return None
         return await c.get_client_stats(email)
+    finally:
+        await c.close()
+
+
+async def renew_account(email: str, server_id: int, add_traffic_gb: int, add_days: int):
+    """
+    تمدید اکانت موجود روی همان سرور: حجم و مدت را به مقادیر فعلی اضافه می‌کند.
+    خروجی: dict با new_total_gb / new_expiry، یا None اگر ناموفق بود.
+    """
+    server = get_server(server_id)
+    if not server or not server.get("is_active", 1):
+        return None
+    c = XUIClient(server)
+    try:
+        ok, _ = await c.login()
+        if not ok:
+            return None
+        return await c.renew_client(email, add_traffic_gb, add_days)
     finally:
         await c.close()

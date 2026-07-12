@@ -204,6 +204,33 @@ async def admin_approve_payment_handler(callback: CallbackQuery, state: FSMConte
     target_user_id = order["telegram_id"]
     await callback.answer("⏳ در حال ساخت اکانت...", show_alert=False)
 
+    # ── تمدید؟ اگر این سفارش تمدید یک اکانت موجود است، به‌جای ساخت جدید، شارژ کن ──
+    from handlers.user_renew import order_is_renewal, fulfill_renewal
+    if order_is_renewal(order):
+        renew_res = await fulfill_renewal(callback.bot, order)
+        if renew_res:
+            # فقط وضعیت پرداخت/سفارش را approved کن (بدون ساخت اشتراک جدید)
+            from database.db import get_connection, _retry_on_locked
+            def _do():
+                conn = get_connection(); cur = conn.cursor()
+                try:
+                    if payment_id:
+                        cur.execute("UPDATE payments SET status='approved' WHERE id=?", (payment_id,))
+                    cur.execute("UPDATE orders SET status='approved' WHERE id=?", (order_id,))
+                    conn.commit()
+                finally:
+                    conn.close()
+            _retry_on_locked(_do)
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            await callback.answer("✅ تمدید انجام شد", show_alert=False)
+            return
+        else:
+            await callback.answer("❌ تمدید ناموفق بود. سرور/اکانت را بررسی کنید.", show_alert=True)
+            return
+
     # پیدا کردن سرور
     from database.db import get_best_server
     try:

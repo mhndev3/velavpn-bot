@@ -308,6 +308,31 @@ async def process_wallet_payment(message_obj, telegram_id: int, order_id: int, s
         await state.clear()
         return
 
+    # ── تمدید؟ اگر سفارش تمدید یک اکانت موجود است، شارژ کن (نه ساخت جدید) ──
+    from handlers.user_renew import order_is_renewal, fulfill_renewal
+    if order_is_renewal(order):
+        renew_res = await fulfill_renewal(message_obj.bot, order)
+        conn = get_connection()
+        cursor = conn.cursor()
+        try:
+            if renew_res:
+                cursor.execute("UPDATE orders SET payment_method='wallet', status='approved' WHERE id=?", (order_id,))
+            cursor.execute("""
+                INSERT INTO payments (order_id, telegram_id, payment_method, receipt_type, receipt_text, status)
+                VALUES (?, ?, 'wallet', 'text', 'پرداخت خودکار از کیف‌پول (تمدید)', ?)
+            """, (order_id, telegram_id, "approved" if renew_res else "waiting_admin_review"))
+            conn.commit()
+        finally:
+            conn.close()
+        if renew_res:
+            deduct_from_wallet(telegram_id, final_price, order_id)
+            await state.clear()
+            return
+        else:
+            await message_obj.answer("❌ تمدید ناموفق بود. لطفاً با پشتیبانی تماس بگیرید.")
+            await state.clear()
+            return
+
     # ── اول X-UI (بدون هیچ DB write) ──────────────────────────
     plan = db_get_plan(order.get("plan_id")) if order.get("plan_id") else None
     server_id = plan.get("server_id") if plan else None
