@@ -400,7 +400,7 @@ async def payment_order_handler(callback: CallbackQuery, state: FSMContext):
     )
 
     if currency == "toman":
-        await send_screen(callback, state, text, reply_markup=toman_payment_keyboard(order_id), banner_key="payment")
+        await send_screen(callback, state, text, reply_markup=toman_payment_keyboard(order_id), banner_key="payment", back_to="u:menu")
     else:
         await callback.answer("روش پرداخت نامعتبر است.", show_alert=True)
 
@@ -434,7 +434,7 @@ async def payment_currency_handler(callback: CallbackQuery, state: FSMContext):
     )
 
     if currency == "toman":
-        await send_screen(callback, state, text, reply_markup=toman_payment_keyboard(order_id), banner_key="payment")
+        await send_screen(callback, state, text, reply_markup=toman_payment_keyboard(order_id), banner_key="payment", back_to="u:menu")
     else:
         await callback.answer("روش پرداخت نامعتبر است.", show_alert=True)
 
@@ -456,6 +456,7 @@ async def payment_method_handler(callback: CallbackQuery, state: FSMContext):
             callback, state,
             admin_card_contact_text(order, order_id),
             banner_key="payment",
+            back_to="u:menu",
         )
         await state.set_state(PaymentStates.waiting_for_card_receipt)
         await callback.answer()
@@ -617,6 +618,6 @@ async def payment_currency_discount_handler(callback: CallbackQuery, state: FSMC
         + payment_price_block(final_price)
     )
     if currency == "toman":
-        await send_screen(callback, state, text, reply_markup=toman_payment_keyboard(order_id), banner_key="payment")
+        await send_screen(callback, state, text, reply_markup=toman_payment_keyboard(order_id), banner_key="payment", back_to="u:menu")
     else:
         await callback.answer("روش پرداخت نامعتبر است.", show_alert=True)

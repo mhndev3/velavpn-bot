@@ -195,11 +195,13 @@ async def have_discount_callback(callback: CallbackQuery, state: FSMContext):
 
     await state.update_data(plan_id=plan_id)
 
+    from services.ui_texts import T
     await send_screen(
         callback,
         state,
-        "🎟 <b>اعمال کد تخفیف</b>\n━━━━━━━━━━━━━━\n\nلطفاً کد تخفیف خود را ارسال کنید تا مبلغ نهایی سفارش محاسبه شود.",
+        T("pay_discount_ask", "🎟 <b>اعمال کد تخفیف</b>\n━━━━━━━━━━━━━━\n\nلطفاً کد تخفیف خود را ارسال کنید تا مبلغ نهایی سفارش محاسبه شود."),
         banner_key="payment",
+        back_to="u:menu",
     )
 
     await state.set_state(UserDiscountStates.waiting_for_discount_code)

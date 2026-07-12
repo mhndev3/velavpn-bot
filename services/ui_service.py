@@ -41,6 +41,32 @@ async def clear_last_screen(state, bot, chat_id: int):
             pass
 
 
+def _with_back_button(reply_markup, back_to: str | None):
+    """در صورت نیاز، یک دکمهٔ «بازگشت» به انتهای کیبورد اضافه می‌کند."""
+    if not back_to:
+        return reply_markup
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    try:
+        from services.ui_texts import T
+        back_label = T("btn_back_generic", "⬅️ بازگشت")
+    except Exception:
+        back_label = "⬅️ بازگشت"
+    back_row = [InlineKeyboardButton(text=back_label, callback_data=back_to)]
+    if reply_markup is None:
+        return InlineKeyboardMarkup(inline_keyboard=[back_row])
+    if isinstance(reply_markup, InlineKeyboardMarkup):
+        rows = list(reply_markup.inline_keyboard)
+        # اگر همین حالا دکمهٔ بازگشت دارد، دوباره اضافه نکن
+        already = any(
+            any((getattr(b, "callback_data", "") or "") == back_to for b in row)
+            for row in rows
+        )
+        if not already:
+            rows.append(back_row)
+        return InlineKeyboardMarkup(inline_keyboard=rows)
+    return reply_markup
+
+
 async def send_screen(
     target,
     state,
@@ -48,6 +74,7 @@ async def send_screen(
     reply_markup=None,
     banner_key: str | None = None,
     delete_trigger: bool = True,
+    back_to: str | None = None,
 ):
     """Send exactly one clean UI screen.
 
@@ -89,6 +116,9 @@ async def send_screen(
     # For typed messages this is the user's command/volume input.
     if delete_trigger:
         await delete_message_safe(bot, chat_id, trigger_message_id)
+
+    # افزودن دکمهٔ بازگشت در صورت درخواست
+    reply_markup = _with_back_button(reply_markup, back_to)
 
     path = banner_path(banner_key) if banner_key else None
 
