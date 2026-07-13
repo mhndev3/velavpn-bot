@@ -170,10 +170,16 @@ class XUIClient:
         return self._hosts_by_inbound
 
     async def add_client(self, inbound_ids, email: str,
-                         traffic_gb: int, duration_days: int):
+                         traffic_gb: int, duration_days: int,
+                         expiry_ms: int = None, traffic_bytes_override: int = None):
         """
         افزودن کلاینت به یک یا چند اینباند (پروتکل‌محور).
         inbound_ids می‌تواند int یا list باشد.
+
+        expiry_ms: اگر داده شود، مستقیماً به‌عنوان expiryTime استفاده می‌شود
+                   (برای اکانت تست با مدت ساعتی دقیق).
+        traffic_bytes_override: اگر داده شود، مستقیماً به‌عنوان totalGB بایتی
+                   استفاده می‌شود (برای حجم مگابایتیِ اکانت تست).
         """
         if isinstance(inbound_ids, (list, tuple)):
             ids = [int(i) for i in inbound_ids]
@@ -188,8 +194,14 @@ class XUIClient:
         cid = str(uuid.uuid4())
         sub_id = _rand(16)
         client_pw = _rand(20)  # برای shadowsocks / trojan password
-        expire_ms = int((datetime.now() + timedelta(days=duration_days)).timestamp() * 1000) if duration_days > 0 else 0
-        traffic_bytes = int(traffic_gb) * 1024 ** 3 if traffic_gb else 0
+        if expiry_ms is not None:
+            expire_ms = int(expiry_ms)
+        else:
+            expire_ms = int((datetime.now() + timedelta(days=duration_days)).timestamp() * 1000) if duration_days > 0 else 0
+        if traffic_bytes_override is not None:
+            traffic_bytes = int(traffic_bytes_override)
+        else:
+            traffic_bytes = int(traffic_gb) * 1024 ** 3 if traffic_gb else 0
 
         client = {
             "id": cid, "email": email, "enable": True,
@@ -630,5 +642,71 @@ async def renew_account(email: str, server_id: int, add_traffic_gb: int, add_day
         if not ok:
             return None
         return await c.renew_client(email, add_traffic_gb, add_days)
+    finally:
+        await c.close()
+
+
+async def provision_test_account(telegram_id: int, server_id: int, inbound_id: int,
+                                  traffic_mb: int, duration_hours: int):
+    """
+    ساخت اکانت تست روی سرور/اینباند مشخص با حجم (مگابایت) و زمان (ساعت) دلخواه ادمین.
+    - حجم بر حسب مگابایت است (اکانت تست کوچک است).
+    - زمان دقیقاً بر حسب ساعت تنظیم می‌شود (مستقیماً expiryTime).
+    - نام کاملاً رندوم با پیشوند test_.
+    خروجی: dict شبیه provision_account، یا None.
+    """
+    server = get_server(server_id)
+    if not server or not server.get("is_active", 1):
+        return None
+    c = XUIClient(server)
+    try:
+        ok, _ = await c.login()
+        if not ok:
+            return None
+        inbounds = await c.get_inbounds()
+        if not inbounds:
+            return None
+        chosen = [ib for ib in inbounds if int(ib.get("id", 0)) == int(inbound_id)]
+        if not chosen:
+            active = [ib for ib in inbounds if ib.get("enable", True)] or inbounds
+            chosen = active[:1]
+        primary = chosen[0]
+        ib_ids = [ib["id"] for ib in chosen]
+
+        # ایمیل یکتا با نام کاملاً رندوم (پیشوند test_ برای شناسایی ادمین)
+        import secrets
+        email = "test_" + secrets.token_hex(5)
+
+        # زمان دقیق بر حسب ساعت + حجم بر حسب مگابایت — مستقیم به add_client
+        exp_ms = int((datetime.now() + timedelta(hours=int(duration_hours))).timestamp() * 1000) if duration_hours else 0
+        traffic_bytes = int(traffic_mb) * 1024 ** 2 if traffic_mb else 0
+
+        result = await c.add_client(
+            ib_ids, email, 0, 0,
+            expiry_ms=exp_ms, traffic_bytes_override=traffic_bytes,
+        )
+        if not result:
+            return None
+
+        password = result.get("password", "")
+        all_links = c.build_links_for_inbounds(chosen, result["client_id"], email, password)
+        config_link = all_links[0]["link"] if all_links else c.build_vless_link(primary, result["client_id"], email, password)
+        expires_at = (datetime.now() + timedelta(hours=int(duration_hours))).strftime("%Y-%m-%d %H:%M")
+        return {
+            "config_link": config_link,
+            "config_links": all_links,
+            "config_type": (primary.get("protocol", "vless") or "vless"),
+            "email": email,
+            "client_id": result["client_id"],
+            "password": password,
+            "server_id": server["id"],
+            "inbound_id": primary["id"],
+            "server_label": server["label"],
+            "expires_at": expires_at,
+            "traffic_mb": int(traffic_mb),
+            "duration_hours": int(duration_hours),
+        }
+    except Exception:
+        return None
     finally:
         await c.close()

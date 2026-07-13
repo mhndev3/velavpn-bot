@@ -202,11 +202,11 @@ async def admin_approve_payment_handler(callback: CallbackQuery, state: FSMConte
         return await callback.answer("سفارش پیدا نشد", show_alert=True)
 
     target_user_id = order["telegram_id"]
-    await callback.answer("⏳ در حال ساخت اکانت...", show_alert=False)
 
     # ── تمدید؟ اگر این سفارش تمدید یک اکانت موجود است، به‌جای ساخت جدید، شارژ کن ──
     from handlers.user_renew import order_is_renewal, fulfill_renewal
     if order_is_renewal(order):
+        await callback.answer("⏳ در حال تمدید اکانت...", show_alert=False)
         renew_res = await fulfill_renewal(callback.bot, order)
         if renew_res:
             # فقط وضعیت پرداخت/سفارش را approved کن (بدون ساخت اشتراک جدید)
@@ -221,15 +221,37 @@ async def admin_approve_payment_handler(callback: CallbackQuery, state: FSMConte
                 finally:
                     conn.close()
             _retry_on_locked(_do)
+            # حذف پیام رسید و ارسال تأیید تمیز به ادمین
             try:
                 await callback.message.delete()
             except Exception:
                 pass
-            await callback.answer("✅ تمدید انجام شد", show_alert=False)
+            try:
+                await callback.bot.send_message(
+                    chat_id=callback.from_user.id,
+                    text=("✅ <b>تمدید انجام شد</b>\n"
+                          "سفارش #" + str(order_id) + " — کانفیگ کاربر شارژ شد."),
+                )
+            except Exception:
+                pass
             return
         else:
-            await callback.answer("❌ تمدید ناموفق بود. سرور/اکانت را بررسی کنید.", show_alert=True)
+            # اکانت روی پنل پیدا نشد یا خطای اتصال — به ادمین پیام واضح بده
+            try:
+                await callback.bot.send_message(
+                    chat_id=callback.from_user.id,
+                    text=("❌ <b>تمدید ناموفق بود</b>\n"
+                          "سفارش #" + str(order_id) + "\n"
+                          "کانفیگ «" + str(order.get("renew_email") or "?") + "» روی پنل پیدا نشد "
+                          "یا اتصال به سرور برقرار نشد.\n"
+                          "لطفاً بررسی کنید که این کانفیگ هنوز روی پنل وجود دارد."),
+                )
+            except Exception:
+                pass
+            await callback.answer("❌ تمدید ناموفق بود", show_alert=True)
             return
+
+    await callback.answer("⏳ در حال ساخت اکانت...", show_alert=False)
 
     # پیدا کردن سرور
     from database.db import get_best_server

@@ -24,7 +24,7 @@ def _hidden(key):
 
 # ترتیب پیش‌فرض دکمه‌های منوی اصلی (btn_buy همیشه اول و تنهاست)
 DEFAULT_MENU_ORDER = [
-    "btn_profile", "btn_wallet", "btn_subs", "btn_renew", "btn_apps", "btn_support",
+    "btn_profile", "btn_wallet", "btn_subs", "btn_renew", "btn_test", "btn_apps", "btn_support",
     "btn_faq", "btn_coop", "btn_guide", "btn_cfg_update", "btn_addcfg",
 ]
 
@@ -141,6 +141,7 @@ def main_menu_keyboard_for(telegram_id: int):
         "btn_buy": "⚡ خرید کانفیگ", "btn_profile": "👤 پنل کاربری",
         "btn_wallet": "💳 کیف پول", "btn_subs": "📦 اشتراک‌های من",
         "btn_renew": "♻️ تمدید اشتراک",
+        "btn_test": "🎁 دریافت اکانت تست",
         "btn_apps": "📲 دریافت برنامه‌ها",
         "btn_support": "🛟 پشتیبانی", "btn_faq": "❓ سوالات متداول",
         "btn_coop": "🤝 درخواست همکاری", "btn_guide": "📘 راهنمای اتصال",
@@ -205,7 +206,7 @@ def main_menu_inline_for(telegram_id: int):
 
     CALLBACKS = {
         "btn_buy": "menu:buy", "btn_profile": "menu:profile", "btn_wallet": "menu:wallet",
-        "btn_subs": "menu:subs", "btn_renew": "menu:renew", "btn_apps": "menu:apps", "btn_support": "menu:support",
+        "btn_subs": "menu:subs", "btn_renew": "menu:renew", "btn_test": "menu:test", "btn_apps": "menu:apps", "btn_support": "menu:support",
         "btn_faq": "menu:faq", "btn_coop": "menu:coop", "btn_guide": "menu:guide",
         "btn_cfg_update": "menu:cfg_update", "btn_addcfg": "menu:addcfg",
     }
@@ -213,6 +214,7 @@ def main_menu_inline_for(telegram_id: int):
         "btn_buy": "⚡ خرید کانفیگ", "btn_profile": "👤 پنل کاربری",
         "btn_wallet": "💳 کیف پول", "btn_subs": "📦 اشتراک‌های من",
         "btn_renew": "♻️ تمدید اشتراک",
+        "btn_test": "🎁 دریافت اکانت تست",
         "btn_apps": "📲 دریافت برنامه‌ها",
         "btn_support": "🛟 پشتیبانی", "btn_faq": "❓ سوالات متداول",
         "btn_coop": "🤝 درخواست همکاری", "btn_guide": "📘 راهنمای اتصال",

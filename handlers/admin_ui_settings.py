@@ -34,6 +34,7 @@ SETTINGS_TREE = {
             "btn_wallet":   ("💳 کیف پول",           "💳 کیف پول"),
             "btn_subs":     ("📦 اشتراک‌های من",     "📦 اشتراک‌های من"),
             "btn_renew":    ("♻️ تمدید اشتراک",      "♻️ تمدید اشتراک"),
+            "btn_test":     ("🎁 دریافت اکانت تست",   "🎁 دریافت اکانت تست"),
             "btn_apps":     ("📲 دریافت برنامه‌ها",   "📲 دریافت برنامه‌ها"),
             "btn_support":  ("🛟 پشتیبانی",          "🛟 پشتیبانی"),
             "btn_faq":      ("❓ سوالات متداول",      "❓ سوالات متداول"),
@@ -68,6 +69,7 @@ SETTINGS_TREE = {
             "banner_profile":       ("بنر پنل کاربری", ""),
             "banner_apps":          ("بنر دریافت برنامه‌ها", ""),
             "banner_renew":         ("بنر تمدید اشتراک", ""),
+            "banner_test":          ("بنر اکانت تست", ""),
         },
     },
     "emojis": {
@@ -186,9 +188,24 @@ SETTINGS_TREE = {
             "rnw_btn_back":     ("دکمهٔ بازگشت", "⬅️ بازگشت"),
         },
     },
+    "test": {
+        "label": "🎁 اکانت تست",
+        "items": {
+            "test_title":       ("عنوان صفحه", "🎁 دریافت اکانت تست"),
+            "test_pick":        ("راهنمای انتخاب", "یکی از اکانت‌های تست زیر را انتخاب کنید:"),
+            "test_disabled":    ("متن غیرفعال بودن", "⛔️ دریافت اکانت تست در حال حاضر غیرفعال است.\nلطفاً بعداً مراجعه کنید."),
+            "test_disabled_short": ("هشدار کوتاه غیرفعال", "غیرفعال است"),
+            "test_none":        ("متن نبودن اکانت تست", "فعلاً اکانت تستی تعریف نشده است."),
+            "test_building":    ("متن در حال ساخت", "⏳ در حال ساخت اکانت تست..."),
+            "test_ready_title": ("عنوان اکانت آماده", "✅ اکانت تست شما آماده است"),
+            "test_failed":      ("متن خطای ساخت", "❌ ساخت اکانت تست ناموفق بود. لطفاً بعداً تلاش کنید."),
+            "test_already":     ("متن دریافت قبلی", "شما قبلاً اکانت تست دریافت کرده‌اید. هر کاربر فقط یک‌بار می‌تواند اکانت تست بگیرد."),
+            "test_btn_back":    ("دکمهٔ بازگشت", "⬅️ بازگشت"),
+        },
+    },
 }
 
-HIDEABLE_BUTTONS = ["btn_wallet", "btn_apps", "btn_renew", "btn_support", "btn_faq",
+HIDEABLE_BUTTONS = ["btn_wallet", "btn_apps", "btn_renew", "btn_test", "btn_support", "btn_faq",
                     "btn_coop", "btn_guide", "btn_cfg_update", "btn_addcfg"]
 
 # نگاشت متن‌های UI به منبعی که ربات واقعاً از آن می‌خواند (content_pages)
@@ -233,13 +250,14 @@ COLOR_CHOICES = [
     ("danger", "🔴 قرمز"),
 ]
 COLOR_NAME = {"": "پیش‌فرض", "primary": "🔵 آبی", "success": "🟢 سبز", "danger": "🔴 قرمز"}
-COLORABLE_BUTTONS = ["btn_buy", "btn_profile", "btn_wallet", "btn_subs", "btn_renew", "btn_apps", "btn_support", "btn_faq",
+COLORABLE_BUTTONS = ["btn_buy", "btn_profile", "btn_wallet", "btn_subs", "btn_renew", "btn_test", "btn_apps", "btn_support", "btn_faq",
                      "btn_coop", "btn_guide", "btn_cfg_update", "btn_addcfg",
                      "btn_admin", "btn_sa_stats", "btn_referral"]
 _BTN_LABELS = {
     "btn_buy": "⚡ خرید کانفیگ", "btn_profile": "👤 پنل کاربری",
     "btn_wallet": "💳 کیف پول", "btn_subs": "📦 اشتراک‌های من",
     "btn_renew": "♻️ تمدید اشتراک",
+    "btn_test": "🎁 دریافت اکانت تست",
     "btn_apps": "📲 دریافت برنامه‌ها",
     "btn_support": "🛟 پشتیبانی", "btn_faq": "❓ سوالات متداول", "btn_coop": "🤝 درخواست همکاری",
     "btn_guide": "📘 راهنمای اتصال", "btn_cfg_update": "🔄 دریافت کانفیگ آپدیت‌شده",

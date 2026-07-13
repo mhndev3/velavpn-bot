@@ -1065,3 +1065,40 @@ def set_user_field(telegram_id, field, value):
 def is_onboarding_done(telegram_id):
     u = get_user(telegram_id)
     return bool(u and u.get("onboarding_done"))
+
+
+# ─── اکانت تست: ثبت و بررسی محدودیت (ضدسوءاستفاده) ──────────
+def has_received_test_account(telegram_id):
+    """آیا این کاربر قبلاً اکانت تست دریافت کرده است؟"""
+    try:
+        conn = get_connection(); cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM test_account_log WHERE telegram_id = ?", (telegram_id,))
+        n = cur.fetchone()[0]; conn.close()
+        return n > 0
+    except Exception:
+        return False
+
+
+def count_test_accounts(telegram_id):
+    """تعداد اکانت‌های تستی که این کاربر گرفته."""
+    try:
+        conn = get_connection(); cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM test_account_log WHERE telegram_id = ?", (telegram_id,))
+        n = cur.fetchone()[0]; conn.close()
+        return int(n)
+    except Exception:
+        return 0
+
+
+def log_test_account(telegram_id, email, server_id, inbound_id, traffic_gb, duration_hours):
+    """ثبت یک اکانت تستِ دریافت‌شده."""
+    try:
+        conn = get_connection(); cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO test_account_log (telegram_id, email, server_id, inbound_id, traffic_gb, duration_hours) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (telegram_id, email, server_id, inbound_id, traffic_gb, duration_hours),
+        )
+        conn.commit(); conn.close(); return True
+    except Exception:
+        return False

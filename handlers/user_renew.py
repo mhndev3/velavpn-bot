@@ -301,6 +301,34 @@ async def fulfill_renewal(bot, order: dict) -> dict | None:
     if not result:
         return None
 
+    # به‌روزرسانی رکورد اکانت در دیتابیس تا «اشتراک‌های من» مقادیر جدید را نشان دهد
+    # (لینک کانفیگ تغییر نمی‌کند؛ فقط حجم/تاریخ به‌روز می‌شود)
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        new_total = result.get("new_total_gb")
+        new_exp = result.get("new_expiry")
+        # traffic_gb فقط اگر عددی بود (نامحدود را دست نزن)
+        if isinstance(new_total, (int, float)) and new_total:
+            cur.execute(
+                "UPDATE xui_accounts SET traffic_gb = ?, expires_at = ? WHERE email = ? AND server_id = ?",
+                (int(new_total), str(new_exp), email, server_id),
+            )
+        else:
+            cur.execute(
+                "UPDATE xui_accounts SET expires_at = ? WHERE email = ? AND server_id = ?",
+                (str(new_exp), email, server_id),
+            )
+        # اشتراک مرتبط را هم به‌روز کن (بر اساس همان اکانت)
+        cur.execute("""
+            UPDATE subscriptions SET expires_at = ?
+            WHERE order_id IN (SELECT order_id FROM xui_accounts WHERE email = ? AND server_id = ?)
+        """, (str(new_exp), email, server_id))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
     # اطلاع به کاربر
     try:
         gb_txt = (str(result.get("new_total_gb")) + " گیگ") if result.get("new_total_gb") else "نامحدود"

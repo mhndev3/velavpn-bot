@@ -36,6 +36,17 @@ def run_migrations():
             url TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""",
+        # ثبت اکانت‌های تستِ دریافت‌شده (ضدسوءاستفاده: محدودیت هر کاربر)
+        """CREATE TABLE IF NOT EXISTS test_account_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telegram_id INTEGER,
+            email TEXT,
+            server_id INTEGER,
+            inbound_id INTEGER,
+            traffic_gb INTEGER,
+            duration_hours INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
     ]
 
     for sql in migrations:

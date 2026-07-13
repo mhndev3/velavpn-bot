@@ -202,6 +202,80 @@ def create_subscription(order, delivery_text=None, delivery_file_id=None, delive
     return expires_at
 
 
+async def _notify_admin_wallet_purchase(bot, order, telegram_id, paid_amount, result):
+    """
+    اعلان خرید از کیف‌پول به هد‌ادمین‌ها:
+    مشخصات کاربر + مشخصات کانفیگ + تعداد + موجودی باقی‌ماندهٔ کیف‌پول.
+    """
+    from database.wallet import get_wallet
+    name = username = phone = ""
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT full_name, username, custom_username, phone FROM users WHERE telegram_id = ?",
+            (telegram_id,),
+        )
+        r = cur.fetchone()
+        conn.close()
+        if r:
+            d = dict(r)
+            name = (d.get("full_name") or "").strip()
+            username = (d.get("custom_username") or d.get("username") or "").strip()
+            phone = (d.get("phone") or "").strip()
+    except Exception:
+        pass
+
+    try:
+        w = get_wallet(telegram_id)
+        remaining = w["balance_toman"] if w else 0
+    except Exception:
+        remaining = 0
+
+    qty = int(order.get("quantity") or 1)
+
+    cfg_block = ""
+    if result:
+        server = result.get("server_label", "—")
+        traffic = result.get("traffic_gb", 0)
+        expires = result.get("expires_at", "—")
+        link = result.get("config_link", "")
+        cfg_block = (
+            "\n🌍 سرور: " + str(server) +
+            (("\n📥 حجم: " + str(traffic) + " گیگ") if traffic else "") +
+            "\n📅 انقضا: " + str(expires)
+        )
+        if link:
+            cfg_block += "\n🔗 لینک:\n<code>" + link + "</code>"
+
+    uname = ("@" + username) if (username and not username.startswith("@")) else (username or "—")
+    text = (
+        "🛒 <b>خرید جدید از کیف‌پول</b>\n"
+        "━━━━━━━━━━━━━━\n"
+        "👤 نام: " + (name or "—") + "\n"
+        "🆔 آیدی: <code>" + str(telegram_id) + "</code>\n"
+        "📛 یوزرنیم: " + uname + "\n"
+        + (("📱 تلفن: " + phone + "\n") if phone else "") +
+        "━━━━━━━━━━━━━━\n"
+        "📦 سرویس: " + str(order.get("service_name") or "—") + "\n"
+        "🏷 نام کانفیگ: " + str(order.get("config_name") or "—") + "\n"
+        "🔢 تعداد: " + str(qty) + "\n"
+        "💵 مبلغ پرداختی: " + "{:,}".format(paid_amount) + " تومان\n"
+        "💳 موجودی باقی‌مانده: " + "{:,}".format(remaining) + " تومان"
+        + cfg_block
+    )
+
+    sent_to = set()
+    for admin_id in ADMIN_IDS:
+        if admin_id in sent_to:
+            continue
+        sent_to.add(admin_id)
+        try:
+            await bot.send_message(chat_id=admin_id, text=text, disable_web_page_preview=True)
+        except Exception:
+            pass
+
+
 async def _finalize_auto_delivery(message_obj, order, payment_id, result):
     from services.referral_service import process_referral_reward, notify_referral_reward
     order_id = order["id"]
@@ -374,6 +448,12 @@ async def process_wallet_payment(message_obj, telegram_id: int, order_id: int, s
 
     # کسر از کیف‌پول
     deduct_from_wallet(telegram_id, final_price, order_id)
+
+    # اعلان خرید کیف‌پول به هد‌ادمین (با مشخصات کاربر، کانفیگ، تعداد و موجودی باقی‌مانده)
+    try:
+        await _notify_admin_wallet_purchase(message_obj.bot, order, telegram_id, final_price, result)
+    except Exception:
+        pass
 
     if result and result.get("config_link"):
         await _finalize_auto_delivery(message_obj, order, payment_id, result)

@@ -35,10 +35,10 @@ async def _periodic_checkpoint():
 from handlers import (
     user_start, user_config_update, user_menu, user_shop, user_payment, user_discounts,
     user_ticket, user_extra, wallet, gb_pricing,
-    user_add_config, onboarding, user_apps, user_renew,
+    user_add_config, onboarding, user_apps, user_renew, user_test_account,
     admin_panel, admin_discounts, admin_tickets, admin_content,
     admin_broadcast, admin_analytics, admin_ui_settings,
-    head_admin_panel, head_admin_wallet, head_admin_pricing, head_admin_apps,
+    head_admin_panel, head_admin_wallet, head_admin_pricing, head_admin_apps, head_admin_test,
     sub_admin_panel, global_navigation,
 )
 from handlers import (
@@ -106,6 +106,7 @@ async def main():
     dp.include_router(user_extra.router)
     dp.include_router(user_apps.router)
     dp.include_router(user_renew.router)
+    dp.include_router(user_test_account.router)
     dp.include_router(user_add_config.router)
     dp.include_router(wallet.router)
     dp.include_router(gb_pricing.router)
@@ -125,6 +126,7 @@ async def main():
     # ── Head admin ───────────────────────────────────────────
     dp.include_router(add_plan_handler.router)
     dp.include_router(head_admin_apps.router)
+    dp.include_router(head_admin_test.router)
     dp.include_router(head_admin_panel.router)
     dp.include_router(head_admin_wallet.router)
     dp.include_router(head_admin_pricing.router)
