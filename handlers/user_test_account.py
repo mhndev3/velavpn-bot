@@ -157,4 +157,23 @@ async def test_get_cb(cb: CallbackQuery):
         await cb.message.delete()
     except Exception:
         pass
-    await cb.message.answer(caption, reply_markup=kb, disable_web_page_preview=True)
+    # ارسال با QR کد (مثل تحویل کانفیگ خرید)
+    sent = False
+    if link:
+        try:
+            import io, qrcode
+            from aiogram.types import BufferedInputFile
+            img = qrcode.make(link)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            buf.seek(0)
+            cap = caption if len(caption) <= 1024 else (caption[:1015] + "…")
+            await cb.message.answer_photo(
+                photo=BufferedInputFile(buf.read(), filename="test_config.png"),
+                caption=cap, reply_markup=kb,
+            )
+            sent = True
+        except Exception:
+            sent = False
+    if not sent:
+        await cb.message.answer(caption, reply_markup=kb, disable_web_page_preview=True)

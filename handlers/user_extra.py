@@ -30,6 +30,23 @@ def _btn(text, data):
     return InlineKeyboardButton(text=text, callback_data=data)
 
 
+def _parse_dt(value):
+    """پارس تاریخ با پشتیبانی از فرمت‌های مختلف (با/بدون ساعت). None اگر ناموفق."""
+    if not value:
+        return None
+    s = str(value).strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(s, fmt)
+        except Exception:
+            continue
+    # تلاش نهایی: فقط بخش تاریخ (۱۰ کاراکتر اول)
+    try:
+        return datetime.strptime(s[:10], "%Y-%m-%d")
+    except Exception:
+        return None
+
+
 def _make_qr(text: str):
     try:
         import qrcode
@@ -59,18 +76,17 @@ def _remaining_text(sub: dict) -> str:
     exp = sub.get("expires_at")
     if not exp:
         return "♾ بدون انقضا"
-    try:
-        dt = datetime.strptime(str(exp)[:19], "%Y-%m-%d %H:%M:%S")
-        delta = dt - datetime.now()
-        if delta.total_seconds() <= 0:
-            return "⛔️ منقضی شده"
-        days = delta.days
-        hours = int(delta.seconds // 3600)
-        if days > 0:
-            return "⏳ باقیمانده: " + _fa(days) + " روز و " + _fa(hours) + " ساعت"
-        return "⏳ باقیمانده: " + _fa(hours) + " ساعت"
-    except Exception:
+    dt = _parse_dt(exp)
+    if not dt:
         return "📅 انقضا: " + str(exp)
+    delta = dt - datetime.now()
+    if delta.total_seconds() <= 0:
+        return "⛔️ منقضی شده"
+    days = delta.days
+    hours = int(delta.seconds // 3600)
+    if days > 0:
+        return "⏳ باقیمانده: " + _fa(days) + " روز و " + _fa(hours) + " ساعت"
+    return "⏳ باقیمانده: " + _fa(hours) + " ساعت"
 
 
 async def _send_subs_list(target, uid: int):
@@ -131,7 +147,8 @@ def _sub_meta(telegram_id: int, order_id: int) -> dict:
         r = cur.fetchone()
         # اگر نام کانفیگ در سفارش نبود، از ایمیلِ اکانت پنل بخوان
         cur.execute(
-            "SELECT xa.email, xa.server_id, xs.label AS acc_label "
+            "SELECT xa.email, xa.server_id, xa.traffic_gb AS acc_gb, xa.expires_at AS acc_exp, "
+            "xs.label AS acc_label "
             "FROM xui_accounts xa LEFT JOIN xui_servers xs ON xs.id = xa.server_id "
             "WHERE xa.order_id = ? AND xa.telegram_id = ?",
             (order_id, telegram_id),
@@ -153,17 +170,28 @@ def _sub_meta(telegram_id: int, order_id: int) -> dict:
             meta["location"] = (d.get("server_label") or "").strip()
         if not meta["config_name"] and xa and xa["email"]:
             meta["config_name"] = str(xa["email"]).strip()
+        # حجم واقعی: اگر اکانت پنل مقدار به‌روز دارد (مثلاً پس از تمدید)، آن را ترجیح بده
+        if xa and xa["acc_gb"] is not None:
+            try:
+                _accgb = int(xa["acc_gb"])
+                if _accgb > 0:
+                    meta["gb"] = _accgb
+            except Exception:
+                pass
         # fallback لوکیشن: از سرورِ اکانتِ ساخته‌شده در پنل
         if not meta["location"] and xa and xa["acc_label"]:
             meta["location"] = str(xa["acc_label"]).strip()
-        # fallback مدت: فاصلهٔ ساخت تا انقضای اشتراک
-        if not meta["days"] and sb and sb["created_at"] and sb["expires_at"]:
-            try:
-                c = datetime.strptime(str(sb["created_at"])[:19], "%Y-%m-%d %H:%M:%S")
-                e = datetime.strptime(str(sb["expires_at"])[:19], "%Y-%m-%d %H:%M:%S")
-                meta["days"] = max(0, (e - c).days)
-            except Exception:
-                pass
+        # مدت واقعی «پلن»: انقضای به‌روز را از اکانت پنل (که پس از تمدید آپدیت
+        # می‌شود) و در نبود آن از اشتراک می‌گیریم. مدت = فاصلهٔ ساخت تا انقضا،
+        # که با هر تمدید بزرگ‌تر می‌شود (مثلاً ۱ماهه + تمدید ۱ماهه = ۲ماهه).
+        _acc_exp = (xa["acc_exp"] if xa else None) or (sb["expires_at"] if sb else None)
+        _created = sb["created_at"] if sb else None
+        e = _parse_dt(_acc_exp)
+        c = _parse_dt(_created)
+        if e and c:
+            _d = (e - c).days
+            if _d > 0:
+                meta["days"] = _d
     except Exception:
         pass
     return meta
@@ -184,18 +212,17 @@ def _remaining_only(sub: dict) -> str:
     exp = sub.get("expires_at")
     if not exp:
         return "♾ بدون انقضا"
-    try:
-        dt = datetime.strptime(str(exp)[:19], "%Y-%m-%d %H:%M:%S")
-        delta = dt - datetime.now()
-        if delta.total_seconds() <= 0:
-            return "⛔️ منقضی شده"
-        days = delta.days
-        hours = int(delta.seconds // 3600)
-        if days > 0:
-            return "\u200f" + _fa(days) + " روز و " + _fa(hours) + " ساعت"
-        return "\u200f" + _fa(hours) + " ساعت"
-    except Exception:
+    dt = _parse_dt(exp)
+    if not dt:
         return str(exp)
+    delta = dt - datetime.now()
+    if delta.total_seconds() <= 0:
+        return "⛔️ منقضی شده"
+    days = delta.days
+    hours = int(delta.seconds // 3600)
+    if days > 0:
+        return "\u200f" + _fa(days) + " روز و " + _fa(hours) + " ساعت"
+    return "\u200f" + _fa(hours) + " ساعت"
 
 
 async def _build_sub_detail(telegram_id: int, order_id: int):
@@ -260,6 +287,7 @@ async def _build_sub_detail(telegram_id: int, order_id: int):
     if sub.get("delivery_file_id"):
         rows.append([_btn(T("subs_btn_file", "📎 دریافت مجدد فایل کانفیگ"), "mysub_file:" + str(order_id))])
     rows.append([_btn(T("subs_btn_refresh", "🔄 بروزرسانی وضعیت"), "mysub:" + str(order_id))])
+    rows.append([_btn(T("subs_btn_delete", "🗑 حذف این کانفیگ"), "mysub_del:" + str(order_id))])
     rows.append([_btn(T("subs_btn_back", "⬅️ بازگشت"), "mysub_back")])
     return text, InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -284,7 +312,61 @@ async def my_sub_detail(cb: CallbackQuery):
         await cb.message.answer(text, reply_markup=kb)
 
 
-@router.callback_query(F.data.startswith("mysub_qr:"))
+@router.callback_query(F.data.startswith("mysub_del:"))
+async def my_sub_delete_confirm(cb: CallbackQuery):
+    order_id = int(cb.data.split(":")[1])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [_btn(T("subs_del_yes", "✅ بله، حذف کن"), "mysub_delok:" + str(order_id))],
+        [_btn(T("subs_del_no", "❌ انصراف"), "mysub:" + str(order_id))],
+    ])
+    txt = T("subs_del_confirm",
+            "⚠️ آیا مطمئنید می‌خواهید این کانفیگ را حذف کنید؟\n"
+            "این عمل قابل بازگشت نیست و کانفیگ از سرور هم پاک می‌شود.")
+    try:
+        if cb.message.photo or cb.message.caption is not None:
+            raise ValueError("photo")
+        await cb.message.edit_text(txt, reply_markup=kb)
+    except Exception:
+        try:
+            await cb.message.delete()
+        except Exception:
+            pass
+        await cb.message.answer(txt, reply_markup=kb)
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("mysub_delok:"))
+async def my_sub_delete_do(cb: CallbackQuery):
+    order_id = int(cb.data.split(":")[1])
+    await cb.answer("⏳ در حال حذف...", show_alert=False)
+    # اکانت X-UI مربوط به این سفارش
+    from database.db import get_xui_account_by_order, get_connection
+    acc = get_xui_account_by_order(order_id)
+    # حذف از پنل
+    if acc and acc.get("email") and acc.get("server_id"):
+        try:
+            from services.xui_service import delete_account
+            await delete_account(acc["email"], acc["server_id"])
+        except Exception:
+            pass
+    # حذف از دیتابیس (اشتراک + اکانت)
+    try:
+        conn = get_connection(); cur = conn.cursor()
+        cur.execute("UPDATE subscriptions SET status='deleted' WHERE order_id=? AND telegram_id=?",
+                    (order_id, cb.from_user.id))
+        cur.execute("UPDATE xui_accounts SET status='deleted' WHERE order_id=? AND telegram_id=?",
+                    (order_id, cb.from_user.id))
+        conn.commit(); conn.close()
+    except Exception:
+        pass
+    try:
+        await cb.message.delete()
+    except Exception:
+        pass
+    await cb.message.answer(T("subs_del_done", "🗑 کانفیگ با موفقیت حذف شد."))
+    await _send_subs_list(cb.message, cb.from_user.id)
+
+
 async def my_sub_qr(cb: CallbackQuery):
     order_id = int(cb.data.split(":")[1])
     sub = get_subscription_by_order(cb.from_user.id, order_id)

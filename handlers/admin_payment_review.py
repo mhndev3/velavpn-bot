@@ -266,6 +266,7 @@ async def admin_approve_payment_handler(callback: CallbackQuery, state: FSMConte
         server_id = best["id"] if best else None
 
     # ── اول X-UI (بدون هیچ DB write) ──
+    quantity = int(order.get("quantity") or 1)
     result = await provision_account(
         order_id=order_id,
         telegram_id=target_user_id,
@@ -273,10 +274,46 @@ async def admin_approve_payment_handler(callback: CallbackQuery, state: FSMConte
         server_id=server_id,
     )
 
+    # اکانت‌های اضافی (سفارش چند-تایی): هرکدام با نام یکتا
+    extra_results = []
+    if result and result.get("config_link") and quantity > 1:
+        for i in range(2, quantity + 1):
+            extra = await provision_account(
+                order_id=order_id,
+                telegram_id=target_user_id,
+                plan=plan or {"duration_days": int(order.get("duration_days") or 30), "traffic_gb": 0},
+                server_id=server_id,
+                name_suffix="-" + str(i),
+            )
+            if extra and extra.get("config_link"):
+                extra_results.append(extra)
+
     # ── بعد همه DB writes در یک تراکنش ──
     if result and result.get("config_link"):
         _finalize_approved(order_id, payment_id, order, result=result)
         await _send_config_to_user(callback.bot, target_user_id, order, result)
+        # اکانت‌های اضافی سفارش چند-تایی: ذخیره و ارسال هرکدام
+        for ex in extra_results:
+            try:
+                from database.db import save_xui_account
+                save_xui_account(
+                    telegram_id=target_user_id, order_id=order_id,
+                    server_id=ex.get("server_id", 0),
+                    xui_client_id=ex.get("client_id", ""),
+                    xui_inbound_id=ex.get("inbound_id", 0),
+                    email=ex.get("email", ""),
+                    config_link=ex.get("config_link", ""),
+                    config_type=ex.get("config_type", "vless"),
+                    traffic_gb=ex.get("traffic_gb", 0),
+                    expires_at=ex.get("expires_at", ""),
+                    sub_id=ex.get("sub_id", ""),
+                )
+            except Exception:
+                pass
+            try:
+                await _send_config_to_user(callback.bot, target_user_id, order, ex)
+            except Exception:
+                pass
         # حذف پیام رسید قبلی (عکس یا متن) و جایگزینی با فاکتور تمیز
         try:
             await callback.message.delete()

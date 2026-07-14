@@ -307,7 +307,9 @@ async def fulfill_renewal(bot, order: dict) -> dict | None:
         conn = get_connection()
         cur = conn.cursor()
         new_total = result.get("new_total_gb")
-        new_exp = result.get("new_expiry")
+        # انقضای کامل (با ساعت) را ترجیح بده تا محاسبهٔ مدت دقیق باشد
+        new_exp = result.get("new_expiry_full") or result.get("new_expiry")
+        was_expired = bool(result.get("was_expired"))
         # traffic_gb فقط اگر عددی بود (نامحدود را دست نزن)
         if isinstance(new_total, (int, float)) and new_total:
             cur.execute(
@@ -320,10 +322,20 @@ async def fulfill_renewal(bot, order: dict) -> dict | None:
                 (str(new_exp), email, server_id),
             )
         # اشتراک مرتبط را هم به‌روز کن (بر اساس همان اکانت)
-        cur.execute("""
-            UPDATE subscriptions SET expires_at = ?
-            WHERE order_id IN (SELECT order_id FROM xui_accounts WHERE email = ? AND server_id = ?)
-        """, (str(new_exp), email, server_id))
+        if was_expired:
+            # اکانت منقضی بوده و از «حالا» تمدید شده؛ created_at را هم به حالا
+            # ریست کن تا مدتِ نمایش‌داده‌شده = مقدار تمدیدشده باشد (نه فاصلهٔ قدیمی).
+            from datetime import datetime as _dt
+            now_str = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
+            cur.execute("""
+                UPDATE subscriptions SET expires_at = ?, created_at = ?
+                WHERE order_id IN (SELECT order_id FROM xui_accounts WHERE email = ? AND server_id = ?)
+            """, (str(new_exp), now_str, email, server_id))
+        else:
+            cur.execute("""
+                UPDATE subscriptions SET expires_at = ?
+                WHERE order_id IN (SELECT order_id FROM xui_accounts WHERE email = ? AND server_id = ?)
+            """, (str(new_exp), email, server_id))
         conn.commit()
         conn.close()
     except Exception:

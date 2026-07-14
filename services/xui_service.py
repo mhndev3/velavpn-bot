@@ -269,6 +269,93 @@ class XUIClient:
                 continue
         return None, None, None
 
+    async def _apply_client_update(self, ib_id, email, mutate):
+        """
+        کلاینت را با به‌روزرسانیِ «کلِ اینباند» تغییر می‌دهد (سازگار با نسخهٔ پنلی
+        که updateClient روی آن 404 می‌دهد).
+
+        mutate: تابعی که dictِ کلاینت را می‌گیرد و در جا تغییرش می‌دهد.
+        روش: کل اینباند را می‌گیریم، کلاینت موردنظر را در settings تغییر می‌دهیم،
+        و کل اینباند را با JSON به /panel/api/inbounds/update/{id} می‌فرستیم.
+        """
+        s = await self._sess()
+        await self._refresh_csrf()
+
+        # کل اینباند را تازه بگیر
+        inbounds = await self.get_inbounds()
+        ib = None
+        for x in inbounds:
+            if int(x.get("id", 0)) == int(ib_id):
+                ib = x
+                break
+        if not ib:
+            return False
+
+        settings = self._parse(ib.get("settings", {}))
+        found = False
+        for cl in settings.get("clients", []):
+            if str(cl.get("email", "")).strip() == str(email).strip():
+                mutate(cl)
+                found = True
+                break
+        if not found:
+            return False
+
+        payload = dict(ib)
+        payload["settings"] = json.dumps(settings)
+        # فیلدهای تودرتو باید رشتهٔ JSON باشند
+        for k in ["streamSettings", "sniffing", "allocate"]:
+            if k in payload and not isinstance(payload[k], str):
+                payload[k] = json.dumps(payload[k])
+        # فیلدهای محاسباتی که نباید فرستاده شوند
+        payload.pop("clientStats", None)
+
+        try:
+            r = await s.post(f"{self.base_url}/panel/api/inbounds/update/{ib_id}",
+                             json=payload, headers=self._h_json())
+            if r.status == 200:
+                d = await r.json()
+                return bool(d.get("success"))
+        except Exception:
+            pass
+        return False
+
+    async def delete_client_by_email(self, email: str):
+        """کلاینت را با حذف از settingsِ کل اینباند حذف می‌کند (سازگار با این پنل)."""
+        ib_id, client, st = await self._find_client_raw(email)
+        if not client or ib_id is None:
+            return False
+        s = await self._sess()
+        await self._refresh_csrf()
+        inbounds = await self.get_inbounds()
+        ib = None
+        for x in inbounds:
+            if int(x.get("id", 0)) == int(ib_id):
+                ib = x
+                break
+        if not ib:
+            return False
+        settings = self._parse(ib.get("settings", {}))
+        before = len(settings.get("clients", []))
+        settings["clients"] = [c for c in settings.get("clients", [])
+                               if str(c.get("email", "")).strip() != str(email).strip()]
+        if len(settings["clients"]) == before:
+            return False
+        payload = dict(ib)
+        payload["settings"] = json.dumps(settings)
+        for k in ["streamSettings", "sniffing", "allocate"]:
+            if k in payload and not isinstance(payload[k], str):
+                payload[k] = json.dumps(payload[k])
+        payload.pop("clientStats", None)
+        try:
+            r = await s.post(f"{self.base_url}/panel/api/inbounds/update/{ib_id}",
+                             json=payload, headers=self._h_json())
+            if r.status == 200:
+                return bool((await r.json()).get("success"))
+        except Exception:
+            pass
+        return False
+
     async def renew_client(self, email: str, add_traffic_gb: int, add_days: int):
         """
         تمدید کلاینت موجود: حجم و زمانِ جدید را به مقادیر فعلی «اضافه» می‌کند.
@@ -277,69 +364,44 @@ class XUIClient:
         - حجم جدید = حجم کل فعلی + حجم خریداری‌شده (اگر نامحدود بود، نامحدود می‌ماند).
         - زمان: اگر هنوز اعتبار دارد → به تاریخ انقضای فعلی اضافه می‌شود؛
           اگر منقضی شده یا انقضا ندارد → از «حالا» + مدت جدید.
-        - اگر مصرف حجم به سقف رسیده و کاربر شارژ می‌کند، چون totalGB بالا می‌رود،
-          اکانت دوباره فعال می‌شود.
         """
-        s = await self._sess()
-        await self._refresh_csrf()
-
         ib_id, client, st = await self._find_client_raw(email)
         if not client or ib_id is None:
             return None
 
         now_ms = int(datetime.now().timestamp() * 1000)
 
-        # ── حجم: افزودن به totalGB فعلی ──
         cur_total = int(client.get("totalGB", 0) or 0)
         add_bytes = int(add_traffic_gb) * 1024 ** 3 if add_traffic_gb else 0
-        if cur_total <= 0:
-            # نامحدود بود → نامحدود می‌ماند
-            new_total = 0
-        else:
-            new_total = cur_total + add_bytes
+        new_total = 0 if cur_total <= 0 else cur_total + add_bytes
 
-        # ── زمان: افزودن به انقضای فعلی یا از حالا ──
         cur_exp = int(client.get("expiryTime", 0) or 0)
+        was_expired = bool(cur_exp) and cur_exp <= now_ms
         add_ms = int(add_days) * 24 * 3600 * 1000 if add_days else 0
         if add_ms == 0:
-            new_exp = cur_exp  # بدون تغییر زمان
+            new_exp = cur_exp
         elif cur_exp and cur_exp > now_ms:
-            new_exp = cur_exp + add_ms      # هنوز اعتبار دارد → اضافه به انقضا
+            new_exp = cur_exp + add_ms
         else:
-            new_exp = now_ms + add_ms        # منقضی/بی‌انقضا → از حالا
+            new_exp = now_ms + add_ms
 
-        # کلاینت به‌روزشده
-        updated = dict(client)
-        updated["totalGB"] = new_total
-        updated["expiryTime"] = new_exp
-        updated["enable"] = True
-        cid = updated.get("id") or ""
+        def _mut(cl):
+            cl["totalGB"] = new_total
+            cl["expiryTime"] = new_exp
+            cl["enable"] = True
 
-        # ── روش v3+: updateClient با uuid کلاینت ──
-        try:
-            payload = {"id": ib_id, "settings": json.dumps({"clients": [updated]})}
-            for ep in [f"/panel/api/inbounds/updateClient/{cid}",
-                       f"/xui/inbound/updateClient/{cid}",
-                       f"/panel/inbound/updateClient/{cid}"]:
-                try:
-                    r = await s.post(f"{self.base_url}{ep}",
-                                     data=urllib.parse.urlencode(payload),
-                                     headers=self._h_form())
-                    if r.status == 200:
-                        d = await r.json()
-                        if d.get("success"):
-                            # اگر حجم به سقف رسیده بود، مصرف را صفر نکن؛ فقط سقف بالا رفته کافی است.
-                            return {
-                                "email": email,
-                                "new_total_gb": (round(new_total / 1024 ** 3, 2) if new_total else 0),
-                                "new_expiry": (datetime.fromtimestamp(new_exp / 1000).strftime("%Y-%m-%d")
-                                               if new_exp else "نامحدود"),
-                            }
-                except Exception:
-                    continue
-        except Exception:
-            pass
-        return None
+        ok = await self._apply_client_update(ib_id, email, _mut)
+        if not ok:
+            return None
+        return {
+            "email": email,
+            "was_expired": was_expired,
+            "new_total_gb": (round(new_total / 1024 ** 3, 2) if new_total else 0),
+            "new_expiry": (datetime.fromtimestamp(new_exp / 1000).strftime("%Y-%m-%d")
+                           if new_exp else "نامحدود"),
+            "new_expiry_full": (datetime.fromtimestamp(new_exp / 1000).strftime("%Y-%m-%d %H:%M:%S")
+                                if new_exp else ""),
+        }
 
     async def get_client_stats(self, email: str):
         target = (email or "").strip()
@@ -534,7 +596,7 @@ async def get_inbounds_for_server(server: dict):
 
 
 async def provision_account(order_id: int, telegram_id: int,
-                             plan, server_id=None, custom_name: str = ""):
+                             plan, server_id=None, custom_name: str = "", name_suffix: str = ""):
     # سرور مقصد: اگر server_id داده شده ولی سرور وجود نداشت/غیرفعال بود،
     # به‌جای شکست، به بهترین سرور فعال fallback می‌کنیم (مثلاً وقتی سرور قدیمی حذف شده).
     server = get_server(server_id) if server_id else None
@@ -585,6 +647,9 @@ async def provision_account(order_id: int, telegram_id: int,
                 email = _cn
         except Exception:
             pass
+        # برای سفارش چند-اکانتی، پسوند یکتا به نام هر کانفیگ اضافه می‌شود
+        if name_suffix:
+            email = email + name_suffix
         result = await c.add_client(ib_ids, email, traffic_gb, duration_days)
         if not result:
             return None
@@ -624,6 +689,21 @@ async def get_account_stats(email: str, server_id: int):
         if not ok:
             return None
         return await c.get_client_stats(email)
+    finally:
+        await c.close()
+
+
+async def delete_account(email: str, server_id: int):
+    """حذف اکانت از پنل (روی سرور مشخص)."""
+    server = get_server(server_id)
+    if not server:
+        return False
+    c = XUIClient(server)
+    try:
+        ok, _ = await c.login()
+        if not ok:
+            return False
+        return await c.delete_client_by_email(email)
     finally:
         await c.close()
 
