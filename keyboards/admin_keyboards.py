@@ -78,6 +78,7 @@ def admin_discounts_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ ساخت کد تخفیف", callback_data="admin_discount:add")],
         [InlineKeyboardButton(text="📋 مشاهده کدهای تخفیف", callback_data="admin_discount:list")],
+        [InlineKeyboardButton(text="✏️ ویرایش / حذف کدها", callback_data="admin_discount:manage")],
         [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="admin:home")],
     ])
 
@@ -93,6 +94,41 @@ def discount_type_keyboard():
 def cancel_discount_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="لغو عملیات", callback_data="admin_discount:cancel")]
+    ])
+
+
+def discount_manage_keyboard(discounts: list):
+    """لیست کدهای تخفیف با دکمهٔ حذف/ویرایش برای هر کد."""
+    rows = []
+    for d in discounts:
+        code = d.get("code", "?")
+        rows.append([InlineKeyboardButton(
+            text="🎟 " + str(code),
+            callback_data="admin_disc:info:" + str(d["id"]),
+        )])
+        rows.append([
+            InlineKeyboardButton(text="✏️ ویرایش", callback_data="admin_disc:edit:" + str(d["id"])),
+            InlineKeyboardButton(text="🗑 حذف", callback_data="admin_disc:del:" + str(d["id"])),
+        ])
+    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="admin:discounts")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def discount_edit_field_keyboard(discount_id: int):
+    """انتخاب فیلدی که ادمین می‌خواهد ویرایش کند."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💰 مقدار تخفیف", callback_data="admin_disc:editf:amount:" + str(discount_id))],
+        [InlineKeyboardButton(text="🔢 تعداد استفاده", callback_data="admin_disc:editf:max_uses:" + str(discount_id))],
+        [InlineKeyboardButton(text="⏳ تمدید انقضا (ساعت)", callback_data="admin_disc:editf:expire:" + str(discount_id))],
+        [InlineKeyboardButton(text="🔁 فعال/غیرفعال", callback_data="admin_disc:toggle:" + str(discount_id))],
+        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="admin_discount:manage")],
+    ])
+
+
+def discount_del_confirm_keyboard(discount_id: int):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ بله، حذف کن", callback_data="admin_disc:delok:" + str(discount_id))],
+        [InlineKeyboardButton(text="❌ انصراف", callback_data="admin_discount:manage")],
     ])
 
 

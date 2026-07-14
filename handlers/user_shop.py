@@ -744,9 +744,10 @@ async def buy_quantity(msg: Message, state: FSMContext):
         "مدت: " + dur + "\n"
         + qty_block +
         "💰 مبلغ قابل پرداخت: " + "{:,}".format(total) + " تومان\n\n"
-        "روش پرداخت را انتخاب کنید:"
+        + T("disc_decision_hint", "اگر کد تخفیف داری، اعمالش کن؛ در غیر این صورت بدون کد ادامه بده:")
     )
-    await msg.answer(text, reply_markup=payment_methods_for_order_keyboard(order_id))
+    from keyboards.user_keyboards import discount_decision_for_order
+    await msg.answer(text, reply_markup=discount_decision_for_order(order_id))
 
 
 @router.callback_query(F.data == "shop_back:categories")

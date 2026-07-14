@@ -10,6 +10,9 @@ from keyboards.admin_keyboards import (
     admin_discounts_keyboard,
     discount_type_keyboard,
     cancel_discount_keyboard,
+    discount_manage_keyboard,
+    discount_edit_field_keyboard,
+    discount_del_confirm_keyboard,
 )
 from states.user_states import DiscountStates
 
@@ -392,3 +395,213 @@ async def admin_discount_cancel(callback: CallbackQuery, state: FSMContext):
     )
 
     await callback.answer()
+
+# ═══════════════════════════════════════════════════════════
+# مدیریت کدها: ویرایش و حذف
+# ═══════════════════════════════════════════════════════════
+def _get_discount(discount_id: int):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM discount_codes WHERE id = ?", (discount_id,))
+    row = cur.fetchone()
+    result = rows_to_dicts(cur, [row])[0] if row else None
+    conn.close()
+    return result
+
+
+@router.callback_query(F.data == "admin_discount:manage")
+async def admin_discount_manage(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("شما دسترسی ادمین ندارید.", show_alert=True)
+    await state.clear()
+    discounts = get_discount_codes()
+    if not discounts:
+        await callback.message.edit_text(
+            "هنوز هیچ کد تخفیفی ساخته نشده.",
+            reply_markup=admin_discounts_keyboard(),
+        )
+        return await callback.answer()
+    await callback.message.edit_text(
+        "✏️ <b>مدیریت کدهای تخفیف</b>\n\n"
+        "برای ویرایش یا حذف هر کد، دکمه‌های زیرش را بزنید.",
+        reply_markup=discount_manage_keyboard(discounts),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_disc:info:"))
+async def admin_disc_info(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("دسترسی ندارید.", show_alert=True)
+    discount_id = int(callback.data.split(":")[2])
+    d = _get_discount(discount_id)
+    if not d:
+        return await callback.answer("کد پیدا نشد.", show_alert=True)
+    await callback.answer(
+        "کد: " + str(d["code"]) + "\n"
+        "نوع: " + discount_type_to_fa(d["discount_type"]) + "\n"
+        "مقدار: " + str(d["amount"]) + "\n"
+        "استفاده: " + str(safe_int(d.get("used_count"))) + "/" + str(safe_int(d.get("max_uses"))) + "\n"
+        "وضعیت: " + discount_status(d),
+        show_alert=True,
+    )
+
+
+# ── حذف ──────────────────────────────────────────────────────
+@router.callback_query(F.data.startswith("admin_disc:del:"))
+async def admin_disc_del(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("دسترسی ندارید.", show_alert=True)
+    discount_id = int(callback.data.split(":")[2])
+    d = _get_discount(discount_id)
+    if not d:
+        return await callback.answer("کد پیدا نشد.", show_alert=True)
+    await callback.message.edit_text(
+        "🗑 <b>حذف کد تخفیف</b>\n\n"
+        "کد <code>" + str(d["code"]) + "</code> حذف شود؟\n"
+        "این عمل قابل بازگشت نیست.",
+        reply_markup=discount_del_confirm_keyboard(discount_id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_disc:delok:"))
+async def admin_disc_delok(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("دسترسی ندارید.", show_alert=True)
+    discount_id = int(callback.data.split(":")[2])
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM discount_codes WHERE id = ?", (discount_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    await callback.answer("🗑 حذف شد")
+    discounts = get_discount_codes()
+    if not discounts:
+        await callback.message.edit_text("همهٔ کدها حذف شدند.", reply_markup=admin_discounts_keyboard())
+    else:
+        await callback.message.edit_text(
+            "✏️ <b>مدیریت کدهای تخفیف</b>\n\nبرای ویرایش یا حذف، دکمه‌ها را بزنید.",
+            reply_markup=discount_manage_keyboard(discounts),
+        )
+
+
+# ── ویرایش ───────────────────────────────────────────────────
+@router.callback_query(F.data.startswith("admin_disc:edit:"))
+async def admin_disc_edit(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("دسترسی ندارید.", show_alert=True)
+    await state.clear()
+    discount_id = int(callback.data.split(":")[2])
+    d = _get_discount(discount_id)
+    if not d:
+        return await callback.answer("کد پیدا نشد.", show_alert=True)
+    await callback.message.edit_text(
+        "✏️ <b>ویرایش کد</b> <code>" + str(d["code"]) + "</code>\n\n"
+        "نوع: " + discount_type_to_fa(d["discount_type"]) + "\n"
+        "مقدار فعلی: " + str(d["amount"]) + "\n"
+        "تعداد استفاده: " + str(safe_int(d.get("used_count"))) + "/" + str(safe_int(d.get("max_uses"))) + "\n"
+        "وضعیت: " + discount_status(d) + "\n\n"
+        "کدام مورد را می‌خواهید تغییر دهید؟",
+        reply_markup=discount_edit_field_keyboard(discount_id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_disc:toggle:"))
+async def admin_disc_toggle(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("دسترسی ندارید.", show_alert=True)
+    discount_id = int(callback.data.split(":")[2])
+    d = _get_discount(discount_id)
+    if not d:
+        return await callback.answer("کد پیدا نشد.", show_alert=True)
+    new_val = 0 if safe_int(d.get("is_active"), 0) else 1
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE discount_codes SET is_active = ? WHERE id = ?", (new_val, discount_id))
+        conn.commit()
+    finally:
+        conn.close()
+    await callback.answer("🟢 فعال شد" if new_val else "🔴 غیرفعال شد")
+    d = _get_discount(discount_id)
+    await callback.message.edit_text(
+        "✏️ <b>ویرایش کد</b> <code>" + str(d["code"]) + "</code>\n\n"
+        "مقدار: " + str(d["amount"]) + "\n"
+        "تعداد استفاده: " + str(safe_int(d.get("used_count"))) + "/" + str(safe_int(d.get("max_uses"))) + "\n"
+        "وضعیت: " + discount_status(d) + "\n\n"
+        "کدام مورد را می‌خواهید تغییر دهید؟",
+        reply_markup=discount_edit_field_keyboard(discount_id),
+    )
+
+
+@router.callback_query(F.data.startswith("admin_disc:editf:"))
+async def admin_disc_edit_field(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        return await callback.answer("دسترسی ندارید.", show_alert=True)
+    parts = callback.data.split(":")
+    field, discount_id = parts[2], int(parts[3])
+    await state.update_data(edit_discount_id=discount_id, edit_field=field)
+    await state.set_state(DiscountStates.waiting_for_edit_value)
+    prompts = {
+        "amount": "مقدار جدید تخفیف را بفرست (درصد یا تومان بسته به نوع کد):",
+        "max_uses": "تعداد کل دفعات مجاز استفاده را بفرست:",
+        "expire": "چند ساعت به انقضا اضافه شود؟ (از الان محاسبه می‌شود)",
+    }
+    await callback.message.answer(prompts.get(field, "مقدار جدید را بفرست:"))
+    await callback.answer()
+
+
+@router.message(DiscountStates.waiting_for_edit_value)
+async def admin_disc_edit_value(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+    txt = (message.text or "").strip()
+    if not txt.isdigit():
+        return await message.answer("عدد معتبر بفرست.")
+    val = int(txt)
+    data = await state.get_data()
+    discount_id = data.get("edit_discount_id")
+    field = data.get("edit_field")
+    d = _get_discount(discount_id)
+    if not d:
+        await state.clear()
+        return await message.answer("کد پیدا نشد.")
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        if field == "amount":
+            if d["discount_type"] == "percent" and not (1 <= val <= 100):
+                conn.close()
+                return await message.answer("درصد باید بین ۱ تا ۱۰۰ باشد.")
+            cur.execute("UPDATE discount_codes SET amount = ? WHERE id = ?", (val, discount_id))
+        elif field == "max_uses":
+            if val <= 0:
+                conn.close()
+                return await message.answer("تعداد باید بیشتر از صفر باشد.")
+            cur.execute("UPDATE discount_codes SET max_uses = ? WHERE id = ?", (val, discount_id))
+        elif field == "expire":
+            new_exp = (datetime.now() + timedelta(hours=val)).strftime("%Y-%m-%d %H:%M:%S")
+            cur.execute("UPDATE discount_codes SET expires_at = ? WHERE id = ?", (new_exp, discount_id))
+        conn.commit()
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    await state.clear()
+    d = _get_discount(discount_id)
+    await message.answer(
+        "✅ ویرایش شد.\n\n"
+        "کد: <code>" + str(d["code"]) + "</code>\n"
+        "مقدار: " + str(d["amount"]) + "\n"
+        "تعداد استفاده: " + str(safe_int(d.get("used_count"))) + "/" + str(safe_int(d.get("max_uses"))) + "\n"
+        "انقضا: " + str(d["expires_at"]) + "\n"
+        "وضعیت: " + discount_status(d),
+        reply_markup=discount_edit_field_keyboard(discount_id),
+    )

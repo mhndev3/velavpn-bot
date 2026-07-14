@@ -42,6 +42,7 @@ class DiscountStates(StatesGroup):
     waiting_for_amount = State()
     waiting_for_max_uses = State()
     waiting_for_expire_hours = State()
+    waiting_for_edit_value = State()
 
 
 class UserDiscountStates(StatesGroup):

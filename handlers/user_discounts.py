@@ -207,8 +207,7 @@ async def have_discount_callback(callback: CallbackQuery, state: FSMContext):
     await state.set_state(UserDiscountStates.waiting_for_discount_code)
 
 
-@router.message(UserDiscountStates.waiting_for_discount_code)
-async def user_discount_code_message(message: Message, state: FSMContext):
+async def _legacy_user_discount_code_message(message: Message, state: FSMContext):
     code = message.text.strip().upper() if message.text else ""
     data = await state.get_data()
 
@@ -319,3 +318,104 @@ async def payment_currency_discount_callback(callback: CallbackQuery, state: FSM
     else:
         await callback.answer("روش پرداخت نامعتبر است.", show_alert=True)
         return
+
+# ═══════════════════════════════════════════════════════════
+# سیستم کد تخفیف order-based (جریان خرید فعلی)
+# صفحهٔ «کد تخفیف دارم / ادامه بدون کد» پیش از انتخاب روش پرداخت
+# ═══════════════════════════════════════════════════════════
+from services.ui_texts import T as _T
+
+
+def _get_order_row(order_id: int):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM orders WHERE id = ?", (order_id,))
+    row = cur.fetchone()
+    cols = [c[0] for c in cur.description] if row else []
+    conn.close()
+    return dict(zip(cols, row)) if row else None
+
+
+@router.callback_query(F.data.startswith("disc:none:"))
+async def disc_none_callback(callback: CallbackQuery, state: FSMContext):
+    """ادامه بدون کد تخفیف → مستقیم به انتخاب روش پرداخت."""
+    from keyboards.user_keyboards import payment_methods_for_order_keyboard
+    order_id = int(callback.data.split(":")[2])
+    await state.clear()
+    text = _T("disc_pay_title", "💳 روش پرداخت را انتخاب کنید:")
+    try:
+        await callback.message.edit_text(text, reply_markup=payment_methods_for_order_keyboard(order_id))
+    except Exception:
+        await callback.message.answer(text, reply_markup=payment_methods_for_order_keyboard(order_id))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("disc:have:"))
+async def disc_have_callback(callback: CallbackQuery, state: FSMContext):
+    """کد تخفیف دارم → درخواست ارسال کد."""
+    order_id = int(callback.data.split(":")[2])
+    await state.update_data(disc_order_id=order_id)
+    await state.set_state(UserDiscountStates.waiting_for_discount_code)
+    text = _T("disc_ask", "🎟 کد تخفیف خود را ارسال کنید:")
+    try:
+        await callback.message.edit_text(text)
+    except Exception:
+        await callback.message.answer(text)
+    await callback.answer()
+
+
+@router.message(UserDiscountStates.waiting_for_discount_code)
+async def disc_code_received(message: Message, state: FSMContext):
+    """کد تخفیف دریافت شد → اعتبارسنجی و اعمال روی order."""
+    from keyboards.user_keyboards import payment_methods_for_order_keyboard
+    data = await state.get_data()
+    order_id = data.get("disc_order_id")
+    if not order_id:
+        # اگر order_id نبود، این پیام مربوط به سیستم قدیمی است؛ رد کن
+        return
+
+    code = (message.text or "").strip().upper()
+    order = _get_order_row(order_id)
+    if not order:
+        await state.clear()
+        return await message.answer(_T("disc_order_gone", "سفارش پیدا نشد. لطفاً دوباره از خرید شروع کنید."))
+
+    discount = get_discount_by_code(code)
+    is_valid, error = is_discount_valid(discount)
+    if not is_valid:
+        return await message.answer(
+            "❌ " + str(error) + "\n\n" +
+            _T("disc_retry", "می‌توانید دوباره کد را بفرستید یا /start را بزنید.")
+        )
+
+    # قیمت پایه از خود سفارش (شامل تعداد)
+    base_price = int(order.get("final_price_toman") or order.get("price_toman") or 0)
+    discount_amount, final_price = calculate_discount(price=base_price, discount=discount)
+
+    # اعمال روی سفارش
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE orders SET discount_code = ?, discount_amount = ?, final_price_toman = ? WHERE id = ?",
+            (discount["code"], discount_amount, final_price, order_id),
+        )
+        cur.execute("UPDATE discount_codes SET used_count = used_count + 1 WHERE id = ?", (discount["id"],))
+        cur.execute(
+            "INSERT INTO discount_usages (discount_code_id, telegram_id, order_id) VALUES (?, ?, ?)",
+            (discount["id"], message.from_user.id, order_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    await state.clear()
+    text = (
+        _T("disc_applied_title", "✅ کد تخفیف اعمال شد") + "\n"
+        "━━━━━━━━━━━━━━\n\n"
+        + _T("disc_lbl_base", "قیمت پایه:") + " " + "{:,}".format(base_price) + " تومان\n"
+        + _T("disc_lbl_off", "تخفیف:") + " " + "{:,}".format(discount_amount) + " تومان\n"
+        + _T("disc_lbl_final", "مبلغ نهایی:") + " " + "{:,}".format(final_price) + " تومان\n\n"
+        + _T("disc_pay_title", "💳 روش پرداخت را انتخاب کنید:")
+    )
+    await message.answer(text, reply_markup=payment_methods_for_order_keyboard(order_id))

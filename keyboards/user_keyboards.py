@@ -287,6 +287,17 @@ def discount_decision_keyboard(plan_id: int):
     ])
 
 
+def discount_decision_for_order(order_id: int):
+    """صفحهٔ «کد تخفیف دارم / ادامه بدون کد» پیش از انتخاب روش پرداخت (order-based)."""
+    from services.ui_texts import T
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=T("disc_btn_have", "🎟 کد تخفیف دارم"),
+                              callback_data="disc:have:" + str(order_id))],
+        [InlineKeyboardButton(text=T("disc_btn_none", "⏭️ ادامه بدون کد تخفیف"),
+                              callback_data="disc:none:" + str(order_id))],
+    ])
+
+
 def services_keyboard(services: list, category: str):
     keyboard = []
     for service in services:
