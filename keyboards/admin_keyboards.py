@@ -79,7 +79,7 @@ def admin_discounts_keyboard():
         [InlineKeyboardButton(text="➕ ساخت کد تخفیف", callback_data="admin_discount:add")],
         [InlineKeyboardButton(text="📋 مشاهده کدهای تخفیف", callback_data="admin_discount:list")],
         [InlineKeyboardButton(text="✏️ ویرایش / حذف کدها", callback_data="admin_discount:manage")],
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="admin:home")],
+        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="ha:home")],
     ])
 
 

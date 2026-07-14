@@ -82,6 +82,7 @@ def head_admin_main_kb():
         [_btn("📢 کانال‌های اجباری", "ha:channels")],
         [_btn("📲 مدیریت برنامه‌ها", "ha:apps")],
         [_btn("🎁 تنظیمات اکانت تست", "ha:test")],
+        [_btn("🎟 مدیریت کد تخفیف", "admin:discounts")],
     ])
 
 
