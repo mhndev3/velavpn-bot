@@ -42,3 +42,4 @@ _*.json
 _*.txt
 *.log
 *.bak
+_deprecated/ 
