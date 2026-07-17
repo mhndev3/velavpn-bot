@@ -18,6 +18,7 @@ from keyboards.user_keyboards import (
 from states.user_states import StarlinkOrderStates
 from services.ui_service import send_screen
 from services.price_service import payment_price_block
+from services.ui_texts import T, TF
 from handlers.btn_filter import Btn
 
 router = Router()
@@ -259,10 +260,10 @@ def _fa(s):
 def _dur_label(days):
     d = int(days or 0)
     if d <= 0:
-        return "بی‌انقضا"
+        return T("u_no_expiry", "بی‌انقضا")
     months = round(d / 30) or 1
     # RLM در ابتدا تا عدد لاتین کنار «ماهه» درست (راست‌به‌چپ) نمایش داده شود
-    return "\u200f" + str(months) + " ماهه"
+    return "\u200f" + str(months) + T("u_month_suffix", " ماهه")
 
 
 def _starlink_locations():
@@ -279,7 +280,7 @@ def _starlink_locations():
         sid = p.get("server_id") or 0
         if sid not in seen:
             seen.add(sid)
-            out.append((sid, label_by_id.get(sid, "لوکیشن پیش‌فرض")))
+            out.append((sid, label_by_id.get(sid, T("shop_loc_fallback", "لوکیشن پیش‌فرض"))))
     return out
 
 
@@ -306,7 +307,7 @@ def _dur_kb(sid, show_back=True):
                                   callback_data="sl_dur:" + str(sid) + ":" + str(d))]
             for d in days_seen]
     if show_back:
-        rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="sl_back_loc")])
+        rows.append([InlineKeyboardButton(text=T("shop_btn_back", "⬅️ بازگشت"), callback_data="sl_back_loc")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -317,11 +318,11 @@ def _plans_kb(sid, days):
     for p in _plans_for_location(sid):
         if int(p.get("duration_days") or 0) != int(days):
             continue
-        gb = (_fa(p["traffic_gb"]) + " گیگ") if p.get("traffic_gb") else "نامحدود"
+        gb = (_fa(p["traffic_gb"]) + T("u_gig", " گیگ")) if p.get("traffic_gb") else T("u_unlimited", "نامحدود")
         price = _fa("{:,}".format(p["price_toman"]))
-        rows.append([InlineKeyboardButton(text="\u200f" + box + " " + gb + " | " + price + " تومان",
+        rows.append([InlineKeyboardButton(text="\u200f" + box + " " + gb + " | " + price + T("u_toman", " تومان"),
                                           callback_data="buy_plan:" + str(p["id"]))])
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="sl_loc:" + str(sid))])
+    rows.append([InlineKeyboardButton(text=T("shop_btn_back", "⬅️ بازگشت"), callback_data="sl_loc:" + str(sid))])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -331,7 +332,7 @@ def _buy_entry_content():
     if not locs:
         return None
     # همیشه مرحلهٔ انتخاب لوکیشن نمایش داده می‌شود (حتی با یک لوکیشن)
-    return ("<b>انتخاب لوکیشن</b>\n━━━━━━━━━━━━━━\n\nلوکیشن مورد نظر را انتخاب کنید:",
+    return (T("shop_loc_title", "<b>انتخاب لوکیشن</b>\n━━━━━━━━━━━━━━\n\nلوکیشن مورد نظر را انتخاب کنید:"),
             _loc_kb())
 
 
@@ -341,7 +342,7 @@ def create_starlink_order(telegram_id: int, volume_gb: int):
         return None
 
     price = int(volume_gb) * starlink_price_per_gb()
-    plan_title = f"استارلینک {volume_gb} گیگابایت | 1 ماهه | کاربر نامحدود"
+    plan_title = TF("shop_sl_plan_title", "استارلینک {gb} گیگابایت | 1 ماهه | کاربر نامحدود", gb=volume_gb)
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -409,12 +410,14 @@ async def show_starlink_intro(callback: CallbackQuery, state: FSMContext):
     else:
         # fallback: volume keyboard
         price = starlink_price_per_gb()
-        text = (
+        text = TF(
+            "shop_sl_intro",
             "<b>Starlink اختصاصی WGV</b>\n"
             "━━━━━━━━━━━━━━\n\n"
-            f"قیمت هر گیگابایت: {price:,} تومان\n"
-            f"حجم قابل سفارش: ۱ تا {STARLINK_MAX_VOLUME_GB} گیگابایت\n\n"
-            "حجم مورد نظر را انتخاب کنید:"
+            "قیمت هر گیگابایت: {price} تومان\n"
+            "حجم قابل سفارش: ۱ تا {max} گیگابایت\n\n"
+            "حجم مورد نظر را انتخاب کنید:",
+            price="{:,}".format(price), max=STARLINK_MAX_VOLUME_GB,
         )
         await send_screen(callback, state, text, reply_markup=starlink_volume_keyboard(), banner_key="starlink")
         await state.set_state(StarlinkOrderStates.waiting_for_volume_gb)
@@ -422,7 +425,9 @@ async def show_starlink_intro(callback: CallbackQuery, state: FSMContext):
 
 async def finalize_starlink_order(target, state: FSMContext, volume_gb: int, from_callback: bool = False):
     if not is_valid_starlink_volume(volume_gb):
-        text = f"حجم انتخابی باید بین ۱ تا {STARLINK_MAX_VOLUME_GB} گیگابایت باشد. لطفاً عدد معتبر وارد کنید."
+        text = TF("shop_vol_invalid",
+                  "حجم انتخابی باید بین ۱ تا {max} گیگابایت باشد. لطفاً عدد معتبر وارد کنید.",
+                  max=STARLINK_MAX_VOLUME_GB)
         if from_callback:
             await target.answer(text, show_alert=True)
         else:
@@ -432,7 +437,8 @@ async def finalize_starlink_order(target, state: FSMContext, volume_gb: int, fro
     user_id = target.from_user.id
     order_data = create_starlink_order(user_id, volume_gb)
     if not order_data:
-        text = "سرویس استارلینک هنوز در دیتابیس فعال نیست. یک بار بات را ری‌استارت کنید تا داده‌های اولیه ساخته شود."
+        text = T("shop_sl_missing",
+                 "سرویس استارلینک هنوز در دیتابیس فعال نیست. یک بار بات را ری‌استارت کنید تا داده‌های اولیه ساخته شود.")
         if from_callback:
             await target.answer(text, show_alert=True)
         else:
@@ -440,16 +446,18 @@ async def finalize_starlink_order(target, state: FSMContext, volume_gb: int, fro
         return
 
     order_id, price, plan_title = order_data
-    text = (
+    text = TF(
+        "shop_sl_invoice",
         "✅ سفارش استارلینک ثبت شد\n"
         "━━━━━━━━━━━━━━\n\n"
-        f"🧾 شماره سفارش: <code>{order_id}</code>\n"
+        "🧾 شماره سفارش: <code>{order_id}</code>\n"
         "سرویس: استارلینک اختصاصی\n"
-        f"📦 حجم: {volume_gb} گیگابایت\n"
+        "📦 حجم: {gb} گیگابایت\n"
         "👥 تعداد کاربر: نامحدود\n"
         "⏳ اعتبار: 1 ماهه\n"
-        f"{payment_price_block(price)}\n\n"
-        "روش پرداخت موردنظر را انتخاب کنید. کارت‌به‌کارت از طریق هماهنگی با ادمین انجام می‌شود و پرداخت ارزی با USDT یا TRX قابل ثبت است."
+        "{price_block}\n\n"
+        "روش پرداخت موردنظر را انتخاب کنید. کارت‌به‌کارت از طریق هماهنگی با ادمین انجام می‌شود و پرداخت ارزی با USDT یا TRX قابل ثبت است.",
+        order_id=order_id, gb=volume_gb, price_block=payment_price_block(price),
     )
 
     await send_screen(target, state, text, reply_markup=payment_methods_for_order_keyboard(order_id), banner_key="payment")
@@ -471,7 +479,8 @@ async def show_starlink_intro_msg(target, state: FSMContext):
         await target.answer(content[0], reply_markup=content[1], parse_mode="HTML")
     else:
         price = starlink_price_per_gb()
-        text = "قیمت هر گیگ: " + "{:,}".format(price) + " تومان\nحجم را انتخاب کنید:"
+        text = TF("shop_sl_intro_short", "قیمت هر گیگ: {price} تومان\nحجم را انتخاب کنید:",
+                  price="{:,}".format(price))
         await target.answer(text, reply_markup=starlink_volume_keyboard(), parse_mode="HTML")
         await state.set_state(StarlinkOrderStates.waiting_for_volume_gb)
 
@@ -487,8 +496,9 @@ async def sl_back_loc_handler(cb: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("sl_loc:"))
 async def sl_loc_handler(cb: CallbackQuery, state: FSMContext):
     sid = int(cb.data.split(":")[1])
-    lbl = dict(_starlink_locations()).get(sid, "لوکیشن")
-    text = "<b>" + lbl + "</b>\n━━━━━━━━━━━━━━\n\nمدت اشتراک را انتخاب کنید:"
+    lbl = dict(_starlink_locations()).get(sid, T("shop_loc_fallback", "لوکیشن"))
+    text = TF("shop_dur_title",
+              "<b>{loc}</b>\n━━━━━━━━━━━━━━\n\nمدت اشتراک را انتخاب کنید:", loc=lbl)
     await send_screen(cb, state, text, reply_markup=_dur_kb(sid, show_back=True), banner_key="starlink")
     await cb.answer()
 
@@ -497,10 +507,12 @@ async def sl_loc_handler(cb: CallbackQuery, state: FSMContext):
 async def sl_dur_handler(cb: CallbackQuery, state: FSMContext):
     parts = cb.data.split(":")
     sid, days = int(parts[1]), int(parts[2])
-    lbl = dict(_starlink_locations()).get(sid, "لوکیشن")
-    text = ("<b>" + lbl + "</b>\n"
-            "مدت: " + _dur_label(days) + "\n"
-            "━━━━━━━━━━━━━━\n\nحجم مورد نظر را انتخاب کنید:")
+    lbl = dict(_starlink_locations()).get(sid, T("shop_loc_fallback", "لوکیشن"))
+    text = TF("shop_vol_title",
+              "<b>{loc}</b>\n"
+              "مدت: {dur}\n"
+              "━━━━━━━━━━━━━━\n\nحجم مورد نظر را انتخاب کنید:",
+              loc=lbl, dur=_dur_label(days))
     await send_screen(cb, state, text, reply_markup=_plans_kb(sid, days), banner_key="starlink")
     await cb.answer()
 
@@ -510,8 +522,9 @@ async def shop_category_handler(callback: CallbackQuery, state: FSMContext):
     category = callback.data.split(":")[1]
     title = CATEGORY_TITLES.get(category)
     if not title:
-        await callback.answer("دسته‌بندی نامعتبر است.", show_alert=True)
+        await callback.answer(T("shop_cat_invalid", "دسته‌بندی نامعتبر است."), show_alert=True)
         return
+    title = T("shop_cat_" + category, title)
 
     if category == "starlink":
         await show_starlink_intro(callback, state)
@@ -522,7 +535,9 @@ async def shop_category_handler(callback: CallbackQuery, state: FSMContext):
         await send_screen(
             callback,
             state,
-            f"{title}\n\nفعلاً پلنی برای این سرور فعال نیست. لطفاً کمی بعد دوباره بررسی کنید.",
+            TF("shop_cat_empty",
+               "{title}\n\nفعلاً پلنی برای این سرور فعال نیست. لطفاً کمی بعد دوباره بررسی کنید.",
+               title=title),
             reply_markup=shop_category_keyboard(),
             banner_key=category,
         )
@@ -531,7 +546,9 @@ async def shop_category_handler(callback: CallbackQuery, state: FSMContext):
     await send_screen(
         callback,
         state,
-        f"{title}\n━━━━━━━━━━━━━━\n\nیکی از سرویس‌های فعال را انتخاب کنید. پس از ثبت سفارش، مسیر پرداخت و ارسال رسید نمایش داده می‌شود.",
+        TF("shop_cat_services",
+           "{title}\n━━━━━━━━━━━━━━\n\nیکی از سرویس‌های فعال را انتخاب کنید. پس از ثبت سفارش، مسیر پرداخت و ارسال رسید نمایش داده می‌شود.",
+           title=title),
         reply_markup=services_keyboard(services, category),
         banner_key=category,
     )
@@ -544,8 +561,10 @@ async def starlink_volume_callback(callback: CallbackQuery, state: FSMContext):
         await send_screen(
             callback,
             state,
-            "✍️ <b>وارد کردن حجم دلخواه</b>\n━━━━━━━━━━━━━━\n\nلطفاً حجم موردنظر را فقط به عدد وارد کنید.\n\nمثال: <code>2</code> یعنی سفارش ۲ گیگابایت\n"
-            f"محدوده مجاز سفارش: ۱ تا {STARLINK_MAX_VOLUME_GB} گیگابایت",
+            TF("shop_vol_custom",
+               "✍️ <b>وارد کردن حجم دلخواه</b>\n━━━━━━━━━━━━━━\n\nلطفاً حجم موردنظر را فقط به عدد وارد کنید.\n\nمثال: <code>2</code> یعنی سفارش ۲ گیگابایت\n"
+               "محدوده مجاز سفارش: ۱ تا {max} گیگابایت",
+               max=STARLINK_MAX_VOLUME_GB),
             banner_key="starlink",
         )
         await state.set_state(StarlinkOrderStates.waiting_for_volume_gb)
@@ -560,8 +579,9 @@ async def starlink_custom_volume_message(message: Message, state: FSMContext):
     volume = parse_volume(message.text or "")
     if volume is None:
         await message.answer(
-            "لطفاً فقط عدد حجم را ارسال کنید.\n"
-            "مثال: <code>2</code> برای سفارش ۲ گیگابایت"
+            T("shop_vol_numeric",
+              "لطفاً فقط عدد حجم را ارسال کنید.\n"
+              "مثال: <code>2</code> برای سفارش ۲ گیگابایت")
         )
         return
     await finalize_starlink_order(message, state, volume, from_callback=False)
@@ -571,11 +591,15 @@ async def starlink_custom_volume_message(message: Message, state: FSMContext):
 async def shop_type_handler(callback: CallbackQuery):
     _, category, buy_type = callback.data.split(":")
     services = get_services_by_category_and_type(category=category, service_type=buy_type)
-    title = CATEGORY_TITLES.get(category, "سرویس VPN")
+    title = T("shop_cat_" + category, CATEGORY_TITLES.get(category, "سرویس VPN"))
     if not services:
-        await send_screen(callback, None, f"{title}\n\nفعلاً سرویسی در این بخش ثبت نشده است.", reply_markup=shop_category_keyboard())
+        await send_screen(callback, None,
+                          TF("shop_type_empty", "{title}\n\nفعلاً سرویسی در این بخش ثبت نشده است.", title=title),
+                          reply_markup=shop_category_keyboard())
         return
-    await send_screen(callback, None, f"{title}\n\nلطفاً سرویس مورد نظر را انتخاب کنید:", reply_markup=services_keyboard(services, category), banner_key=category)
+    await send_screen(callback, None,
+                      TF("shop_type_pick", "{title}\n\nلطفاً سرویس مورد نظر را انتخاب کنید:", title=title),
+                      reply_markup=services_keyboard(services, category), banner_key=category)
 
 
 @router.callback_query(F.data.startswith("service:"))
@@ -583,16 +607,19 @@ async def service_detail_handler(callback: CallbackQuery):
     service_id = int(callback.data.split(":")[1])
     service = get_service(service_id)
     if not service:
-        await callback.answer("سرویس پیدا نشد.", show_alert=True)
+        await callback.answer(T("shop_svc_gone", "سرویس پیدا نشد."), show_alert=True)
         return
 
-    label = "تک‌کاربره" if service["service_type"] == "single" else "چندکاربره / سازمانی"
-    text = (
-        f"✨ <b>{service['name']}</b>\n"
+    label = T("shop_svc_single", "تک‌کاربره") if service["service_type"] == "single" else T("shop_svc_multi", "چندکاربره / سازمانی")
+    text = TF(
+        "shop_svc_detail",
+        "✨ <b>{name}</b>\n"
         "━━━━━━━━━━━━━━\n\n"
-        f"نوع سرویس: {label}\n\n"
-        f"{service['description'] or 'توضیحات این سرویس به‌زودی تکمیل می‌شود.'}\n\n"
-        "برای مشاهده پلن‌ها و ثبت سفارش، دکمه زیر را انتخاب کنید."
+        "نوع سرویس: {type}\n\n"
+        "{desc}\n\n"
+        "برای مشاهده پلن‌ها و ثبت سفارش، دکمه زیر را انتخاب کنید.",
+        name=service["name"], type=label,
+        desc=service["description"] or T("shop_svc_no_desc", "توضیحات این سرویس به‌زودی تکمیل می‌شود."),
     )
     await send_screen(callback, None, text, reply_markup=service_buy_keyboard(service_id), banner_key=service["category"])
 
@@ -602,10 +629,11 @@ async def buy_service_handler(callback: CallbackQuery):
     service_id = int(callback.data.split(":")[1])
     plans = get_plans_by_service(service_id)
     if not plans:
-        await send_screen(callback, None, "برای این سرویس هنوز پلنی ثبت نشده است.")
+        await send_screen(callback, None, T("shop_svc_no_plans", "برای این سرویس هنوز پلنی ثبت نشده است."))
         return
 
-    text = (
+    text = T(
+        "shop_vip_pick",
         "💎 انتخاب پلن VIP\n"
         "━━━━━━━━━━━━━━\n\n"
         "پلن مناسب مصرف خود را انتخاب کنید. مبلغ هر پلن در مرحله بعد همراه با معادل USDT و TRX نمایش داده می‌شود."
@@ -618,20 +646,23 @@ async def select_plan_handler(callback: CallbackQuery):
     plan_id = int(callback.data.split(":")[1])
     plan = get_plan(plan_id)
     if not plan:
-        await callback.answer("پلن پیدا نشد.", show_alert=True)
+        await callback.answer(T("shop_plan_notfound", "پلن پیدا نشد."), show_alert=True)
         return
 
     from database.sub_admin_pricing import get_price_for_user
     final_price = get_price_for_user(callback.from_user.id, plan_id)
 
-    text = (
+    text = TF(
+        "shop_plan_selected",
         "✅ پلن انتخاب شد\n"
         "━━━━━━━━━━━━━━\n\n"
-        f"🔐 سرویس: {plan['service_name']}\n"
-        f"💠 پلن: {plan['title']}\n"
-        f"⏳ مدت اعتبار: {_dur_label(plan['duration_days'])}\n"
-        f"{payment_price_block(final_price)}\n\n"
-        "در صورت داشتن کد تخفیف، آن را اعمال کنید. در غیر این صورت، پرداخت را ادامه دهید."
+        "🔐 سرویس: {service}\n"
+        "💠 پلن: {plan}\n"
+        "⏳ مدت اعتبار: {dur}\n"
+        "{price_block}\n\n"
+        "در صورت داشتن کد تخفیف، آن را اعمال کنید. در غیر این صورت، پرداخت را ادامه دهید.",
+        service=plan["service_name"], plan=plan["title"],
+        dur=_dur_label(plan["duration_days"]), price_block=payment_price_block(final_price),
     )
     await send_screen(callback, None, text, reply_markup=discount_decision_keyboard(plan_id), banner_key="payment")
 
@@ -645,7 +676,7 @@ async def buy_plan_from_db(callback: CallbackQuery, state: FSMContext):
     plan_id = int(callback.data.split(":")[1])
     plan = _get_active_plan(plan_id)
     if not plan:
-        return await callback.answer("این پلن دیگر موجود نیست.", show_alert=True)
+        return await callback.answer(T("shop_plan_gone", "این پلن دیگر موجود نیست."), show_alert=True)
 
     await state.clear()
     await state.update_data(buy_plan_id=plan_id)
@@ -682,8 +713,8 @@ async def _ask_quantity(target, state: FSMContext):
 async def buy_random_name(callback: CallbackQuery, state: FSMContext):
     name = _random_config_name()
     await state.update_data(config_name=name)
-    await callback.answer("🎲 نام ساخته شد")
-    await callback.message.answer(f"🏷 نام کانفیگ: <code>{name}</code>")
+    await callback.answer(T("buy_name_made", "🎲 نام ساخته شد"))
+    await callback.message.answer(TF("buy_name_show", "🏷 نام کانفیگ: <code>{name}</code>", name=name))
     await _ask_quantity(callback.message, state)
 
 
@@ -721,30 +752,36 @@ async def buy_quantity(msg: Message, state: FSMContext):
     plan = _get_active_plan(plan_id)
     if not plan:
         await state.clear()
-        return await msg.answer("این پلن دیگر موجود نیست.")
+        return await msg.answer(T("shop_plan_gone", "این پلن دیگر موجود نیست."))
 
     order_id = _create_db_order(msg.from_user.id, plan, plan_id, config_name, qty)
     await state.clear()
 
     unit = plan["price_toman"]
     total = unit * qty
-    gb = str(plan["traffic_gb"]) + " GB" if plan.get("traffic_gb") else "نامحدود"
-    dur = _dur_label(plan["duration_days"]) if plan.get("duration_days") else "بی‌انقضا"
-    name_line = ("🏷 نام کانفیگ: " + config_name + "\n") if config_name else ""
-    qty_block = (
-        "🔢 تعداد: " + "{:,}".format(qty) + " عدد\n"
-        "💵 قیمت واحد: " + "{:,}".format(unit) + " تومان\n"
+    gb = str(plan["traffic_gb"]) + " GB" if plan.get("traffic_gb") else T("u_unlimited", "نامحدود")
+    dur = _dur_label(plan["duration_days"]) if plan.get("duration_days") else T("u_no_expiry", "بی‌انقضا")
+    name_line = TF("shop_invoice_name_line", "🏷 نام کانفیگ: {name}\n", name=config_name) if config_name else ""
+    qty_block = TF(
+        "shop_invoice_qty_block",
+        "🔢 تعداد: {qty} عدد\n"
+        "💵 قیمت واحد: {unit} تومان\n",
+        qty="{:,}".format(qty), unit="{:,}".format(unit),
     ) if qty > 1 else ""
-    text = (
+    text = TF(
+        "shop_invoice",
         "✅ سفارش ثبت شد\n"
         "━━━━━━━━━━━━━━\n\n"
-        + name_line
-        + "پلن: " + plan["title"] + "\n"
-        "حجم: " + gb + "\n"
-        "مدت: " + dur + "\n"
-        + qty_block +
-        "💰 مبلغ قابل پرداخت: " + "{:,}".format(total) + " تومان\n\n"
-        + T("disc_decision_hint", "اگر کد تخفیف داری، اعمالش کن؛ در غیر این صورت بدون کد ادامه بده:")
+        "{name_line}"
+        "پلن: {plan}\n"
+        "حجم: {gb}\n"
+        "مدت: {dur}\n"
+        "{qty_block}"
+        "💰 مبلغ قابل پرداخت: {total} تومان\n\n"
+        "{hint}",
+        name_line=name_line, plan=plan["title"], gb=gb, dur=dur, qty_block=qty_block,
+        total="{:,}".format(total),
+        hint=T("disc_decision_hint", "اگر کد تخفیف داری، اعمالش کن؛ در غیر این صورت بدون کد ادامه بده:"),
     )
     from keyboards.user_keyboards import discount_decision_for_order
     await msg.answer(text, reply_markup=discount_decision_for_order(order_id))
@@ -753,7 +790,8 @@ async def buy_quantity(msg: Message, state: FSMContext):
 @router.callback_query(F.data == "shop_back:categories")
 async def back_to_categories_handler(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    text = (
+    text = T(
+        "shop_back_title",
         "⚡ خرید کانفیگ VIP\n"
         "━━━━━━━━━━━━━━\n\n"
         "لطفاً سرویس موردنظر خود را انتخاب کنید:"

@@ -30,6 +30,7 @@ from services.referral_service import (
 )
 from services.ui_service import send_screen
 from services.price_service import payment_price_block
+from services.ui_texts import T, TF
 from services.xui_service import provision_account
 from database.db import get_plan as db_get_plan
 
@@ -41,9 +42,9 @@ def _months_label(days) -> str:
     """مدت را بر حسب ماه نشان می‌دهد (مثلاً 120 روز → «۴ ماهه»)."""
     d = int(days or 0)
     if d <= 0:
-        return "بی‌انقضا"
+        return T("u_no_expiry", "بی‌انقضا")
     months = round(d / 30) or 1
-    return str(months) + " ماهه"
+    return str(months) + T("u_month_suffix", " ماهه")
 
 
 def rows_to_dicts(cursor, rows):
@@ -75,13 +76,15 @@ def get_report_targets(order: dict) -> list:
 def admin_card_contact_text(order: dict, order_id: int) -> str:
     final_price = order["final_price_toman"] or order["price_toman"]
     card_info = get_setting("card_info", "شماره کارت تنظیم نشده")
-    return (
+    return TF(
+        "pay_card_text",
         "💳 <b>پرداخت کارت‌به‌کارت</b>\n"
         "━━━━━━━━━━━━━━\n\n"
-        "🧾 شماره سفارش: <code>" + str(order_id) + "</code>\n"
-        "💰 مبلغ: <b>" + "{:,}".format(final_price) + " تومان</b>\n\n"
-        "💳 اطلاعات کارت:\n<code>" + card_info + "</code>\n\n"
-        "لطفاً مبلغ را واریز کرده و <b>رسید</b> (عکس یا شماره پیگیری) را اینجا ارسال کنید."
+        "🧾 شماره سفارش: <code>{order_id}</code>\n"
+        "💰 مبلغ: <b>{price} تومان</b>\n\n"
+        "💳 اطلاعات کارت:\n<code>{card}</code>\n\n"
+        "لطفاً مبلغ را واریز کرده و <b>رسید</b> (عکس یا شماره پیگیری) را اینجا ارسال کنید.",
+        order_id=order_id, price="{:,}".format(final_price), card=card_info,
     )
 
 
@@ -328,16 +331,20 @@ async def _finalize_auto_delivery(message_obj, order, payment_id, result):
     except Exception:
         reward_data = {}
 
-    msg_text = (
+    msg_text = TF(
+        "pay_delivered",
         "✅ پرداخت تایید شد و کانفیگ آماده است!\n\n"
-        "سرویس: " + str(order["service_name"]) + "\n"
-        "پلن: " + str(order["plan_title"]) + "\n"
-        "سرور: " + str(server) + "\n"
-        "انقضا: " + str(expires_at) + "\n"
+        "سرویس: {service}\n"
+        "پلن: {plan}\n"
+        "سرور: {server}\n"
+        "انقضا: {expires}\n",
+        service=order["service_name"], plan=order["plan_title"],
+        server=server, expires=expires_at,
     )
     if traffic:
-        msg_text += "حجم: " + str(traffic) + " GB\n"
-    msg_text += "\n🔗 لینک " + config_type + ":\n<code>" + config_link + "</code>"
+        msg_text += TF("pay_delivered_traffic", "حجم: {gb} GB\n", gb=traffic)
+    msg_text += TF("pay_delivered_link", "\n🔗 لینک {type}:\n<code>{link}</code>",
+                   type=config_type, link=config_link)
 
     await message_obj.bot.send_message(chat_id=target_user_id, text=msg_text)
 
@@ -362,7 +369,7 @@ async def process_wallet_payment(message_obj, telegram_id: int, order_id: int, s
     from database.wallet import get_wallet, deduct_from_wallet
     order = get_order(order_id)
     if not order:
-        await message_obj.answer("❌ سفارش پیدا نشد.")
+        await message_obj.answer("❌ " + T("pay_order_gone", "سفارش پیدا نشد."))
         await state.clear()
         return
 
@@ -373,11 +380,14 @@ async def process_wallet_payment(message_obj, telegram_id: int, order_id: int, s
     if balance < final_price:
         shortage = final_price - balance
         await message_obj.answer(
-            "❌ موجودی کیف‌پول کافی نیست\n\n"
-            "نیاز: " + "{:,}".format(final_price) + " تومان\n"
-            "موجودی: " + "{:,}".format(balance) + " تومان\n"
-            "کمبود: " + "{:,}".format(shortage) + " تومان\n\n"
-            "از بخش «💳 کیف پول» شارژ کنید."
+            TF("pay_wallet_insufficient",
+               "❌ موجودی کیف‌پول کافی نیست\n\n"
+               "نیاز: {need} تومان\n"
+               "موجودی: {balance} تومان\n"
+               "کمبود: {shortage} تومان\n\n"
+               "از بخش «💳 کیف پول» شارژ کنید.",
+               need="{:,}".format(final_price), balance="{:,}".format(balance),
+               shortage="{:,}".format(shortage))
         )
         await state.clear()
         return
@@ -403,7 +413,7 @@ async def process_wallet_payment(message_obj, telegram_id: int, order_id: int, s
             await state.clear()
             return
         else:
-            await message_obj.answer("❌ تمدید ناموفق بود. لطفاً با پشتیبانی تماس بگیرید.")
+            await message_obj.answer(T("pay_renew_failed", "❌ تمدید ناموفق بود. لطفاً با پشتیبانی تماس بگیرید."))
             await state.clear()
             return
 
@@ -462,10 +472,12 @@ async def process_wallet_payment(message_obj, telegram_id: int, order_id: int, s
 
     update_order_status(order_id, "waiting_delivery")
     await message_obj.answer(
-        "✅ پرداخت از کیف‌پول انجام شد\n\n"
-        "سرویس: " + str(order["service_name"]) + "\n"
-        "مبلغ: " + "{:,}".format(final_price) + " تومان\n\n"
-        "⏳ کانفیگ به‌زودی توسط پشتیبانی ارسال می‌شود."
+        TF("pay_wallet_waiting",
+           "✅ پرداخت از کیف‌پول انجام شد\n\n"
+           "سرویس: {service}\n"
+           "مبلغ: {price} تومان\n\n"
+           "⏳ کانفیگ به‌زودی توسط پشتیبانی ارسال می‌شود.",
+           service=order["service_name"], price="{:,}".format(final_price))
     )
 
     for admin_id in ADMIN_IDS:
@@ -492,22 +504,25 @@ async def payment_order_handler(callback: CallbackQuery, state: FSMContext):
     order_id = int(order_id_raw)
     order = get_order(order_id)
     if not order:
-        return await callback.answer("سفارش پیدا نشد.", show_alert=True)
+        return await callback.answer(T("pay_order_gone", "سفارش پیدا نشد."), show_alert=True)
 
     final_price = order["final_price_toman"] or order["price_toman"]
-    text = (
+    text = TF(
+        "pay_order_pick",
         "💳 انتخاب روش پرداخت\n"
         "━━━━━━━━━━━━━━\n\n"
-        "شماره سفارش: <code>" + str(order_id) + "</code>\n"
-        "سرویس: " + str(order["service_name"]) + "\n"
-        "پلن: " + str(order["plan_title"]) + "\n"
-        + payment_price_block(final_price)
+        "شماره سفارش: <code>{order_id}</code>\n"
+        "سرویس: {service}\n"
+        "پلن: {plan}\n"
+        "{price_block}",
+        order_id=order_id, service=order["service_name"], plan=order["plan_title"],
+        price_block=payment_price_block(final_price),
     )
 
     if currency == "toman":
         await send_screen(callback, state, text, reply_markup=toman_payment_keyboard(order_id), banner_key="payment", back_to="u:menu")
     else:
-        await callback.answer("روش پرداخت نامعتبر است.", show_alert=True)
+        await callback.answer(T("pay_method_invalid", "روش پرداخت نامعتبر است."), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("payment_currency:"))
@@ -516,7 +531,7 @@ async def payment_currency_handler(callback: CallbackQuery, state: FSMContext):
     plan_id = int(plan_id_raw)
     plan = get_plan(plan_id)
     if not plan:
-        return await callback.answer("پلن پیدا نشد.", show_alert=True)
+        return await callback.answer(T("shop_plan_notfound", "پلن پیدا نشد."), show_alert=True)
 
     order_id = create_order(telegram_id=callback.from_user.id, plan=plan)
 
@@ -528,20 +543,24 @@ async def payment_currency_handler(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
-    text = (
+    text = TF(
+        "pay_order_created",
         "🧾 سفارش ثبت شد\n"
         "━━━━━━━━━━━━━━\n\n"
-        "شماره سفارش: <code>" + str(order_id) + "</code>\n"
-        "سرویس: " + str(plan["service_name"]) + "\n"
-        "پلن: " + str(plan["title"]) + "\n"
-        "مدت: " + _months_label(plan.get("duration_days")) + "\n"
-        + payment_price_block(final_price)
+        "شماره سفارش: <code>{order_id}</code>\n"
+        "سرویس: {service}\n"
+        "پلن: {plan}\n"
+        "مدت: {dur}\n"
+        "{price_block}",
+        order_id=order_id, service=plan["service_name"], plan=plan["title"],
+        dur=_months_label(plan.get("duration_days")),
+        price_block=payment_price_block(final_price),
     )
 
     if currency == "toman":
         await send_screen(callback, state, text, reply_markup=toman_payment_keyboard(order_id), banner_key="payment", back_to="u:menu")
     else:
-        await callback.answer("روش پرداخت نامعتبر است.", show_alert=True)
+        await callback.answer(T("pay_method_invalid", "روش پرداخت نامعتبر است."), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("payment_method:"))
@@ -550,7 +569,7 @@ async def payment_method_handler(callback: CallbackQuery, state: FSMContext):
     order_id = int(order_id_raw)
     order = get_order(order_id)
     if not order:
-        return await callback.answer("سفارش پیدا نشد.", show_alert=True)
+        return await callback.answer(T("pay_order_gone", "سفارش پیدا نشد."), show_alert=True)
 
     update_order_payment_method(order_id, method)
 
@@ -573,7 +592,7 @@ async def payment_method_handler(callback: CallbackQuery, state: FSMContext):
         return
 
     else:
-        await callback.answer("روش پرداخت نامعتبر است.", show_alert=True)
+        await callback.answer(T("pay_method_invalid", "روش پرداخت نامعتبر است."), show_alert=True)
 
 
 @router.message(PaymentStates.waiting_for_card_receipt)
@@ -582,7 +601,7 @@ async def card_receipt_handler(message: Message, state: FSMContext):
     order_id = data.get("order_id")
     payment_method = data.get("payment_method", "card")
 
-    receipt_text = message.caption or message.text or "رسید بدون متن"
+    receipt_text = message.caption or message.text or T("pay_receipt_no_text", "رسید بدون متن")
     file_id = None
     receipt_type = "text"
 
@@ -603,9 +622,10 @@ async def card_receipt_handler(message: Message, state: FSMContext):
     )
 
     await message.answer(
-        "✅ رسید شما ثبت شد.\n\n"
-        "پرداخت برای بررسی به ادمین ارسال شد.\n"
-        "بعد از تایید، کانفیگ برای شما ارسال می‌شه."
+        T("pay_receipt_saved",
+          "✅ رسید شما ثبت شد.\n\n"
+          "پرداخت برای بررسی به ادمین ارسال شد.\n"
+          "بعد از تایید، کانفیگ برای شما ارسال می‌شه.")
     )
 
     order = get_order(order_id)
@@ -668,7 +688,7 @@ async def payment_currency_discount_handler(callback: CallbackQuery, state: FSMC
 
     plan = get_plan(plan_id)
     if not plan:
-        return await callback.answer("پلن پیدا نشد.", show_alert=True)
+        return await callback.answer(T("shop_plan_notfound", "پلن پیدا نشد."), show_alert=True)
 
     from database.sub_admin_pricing import get_price_for_user
     base_price = get_price_for_user(callback.from_user.id, plan_id)
@@ -714,15 +734,18 @@ async def payment_currency_discount_handler(callback: CallbackQuery, state: FSMC
         await callback.answer()
         return
 
-    text = (
+    text = TF(
+        "pay_order_created_disc",
         "🧾 سفارش ثبت شد\n"
         "━━━━━━━━━━━━━━\n\n"
-        "شماره سفارش: <code>" + str(order_id) + "</code>\n"
-        "سرویس: " + str(plan["service_name"]) + "\n"
-        "پلن: " + str(plan["title"]) + "\n"
-        + payment_price_block(final_price)
+        "شماره سفارش: <code>{order_id}</code>\n"
+        "سرویس: {service}\n"
+        "پلن: {plan}\n"
+        "{price_block}",
+        order_id=order_id, service=plan["service_name"], plan=plan["title"],
+        price_block=payment_price_block(final_price),
     )
     if currency == "toman":
         await send_screen(callback, state, text, reply_markup=toman_payment_keyboard(order_id), banner_key="payment", back_to="u:menu")
     else:
-        await callback.answer("روش پرداخت نامعتبر است.", show_alert=True)
+        await callback.answer(T("pay_method_invalid", "روش پرداخت نامعتبر است."), show_alert=True)

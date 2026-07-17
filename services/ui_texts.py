@@ -12,3 +12,25 @@ def T(key: str, default: str = "") -> str:
     if val is None or val == "":
         return default
     return val
+
+
+class _SafeDict(dict):
+    """جای placeholder ناشناخته را دست‌نخورده می‌گذارد تا format خطا ندهد."""
+    def __missing__(self, k):
+        return "{" + k + "}"
+
+
+def TF(key: str, default: str = "", **kw) -> str:
+    """
+    مثل T ولی برای قالب‌های دارای placeholder مثل {price} یا {name}.
+    اگر ادمین متن را طوری ویرایش کند که قالب خراب شود، به‌جای کرش،
+    پیش‌فرض استفاده می‌شود (بات هرگز نمی‌شکند).
+    """
+    tpl = T(key, default)
+    try:
+        return tpl.format_map(_SafeDict(**kw))
+    except Exception:
+        try:
+            return default.format_map(_SafeDict(**kw))
+        except Exception:
+            return default
