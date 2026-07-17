@@ -15,6 +15,7 @@ from keyboards.user_keyboards import (
     faq_questions_keyboard,
 )
 from services.banner_service import send_banner
+from services.ui_texts import T, TF
 from handlers.btn_filter import Btn
 
 
@@ -111,16 +112,17 @@ async def channels_list_handler(message: Message):
     await send_content_page(
         message=message,
         key="channels_list",
-        fallback_text=(
+        fallback_text=T(
+            "guide_fallback",
             "📋 لیست راهنمای اتصال\n\n"
             "لیست راهنمای اتصال در این بخش نمایش داده می‌شود."
         )
     )
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     await message.answer(
-        "برای بازگشت به منو دکمهٔ زیر را بزنید:",
+        T("guide_back_hint", "برای بازگشت به منو دکمهٔ زیر را بزنید:"),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="u:menu")]
+            [InlineKeyboardButton(text=T("guide_btn_back", "⬅️ بازگشت"), callback_data="u:menu")]
         ]),
     )
 
@@ -133,7 +135,8 @@ async def track_purchase_handler(message: Message):
         await send_banner(
             message,
             "tracking",
-            caption=(
+            caption=T(
+                "track_empty",
                 "🔎 <b>پیگیری خرید</b>\n"
                 "━━━━━━━━━━━━━━\n\n"
                 "هنوز سفارشی برای شما ثبت نشده است. برای شروع، از بخش خرید کانفیگ سرویس موردنظر را انتخاب کنید."
@@ -141,21 +144,21 @@ async def track_purchase_handler(message: Message):
         )
         return
 
-    text = "🔎 <b>آخرین سفارش‌های شما</b>\n━━━━━━━━━━━━━━\n\n"
+    text = T("track_title", "🔎 <b>آخرین سفارش‌های شما</b>\n━━━━━━━━━━━━━━\n\n")
 
     for order in orders:
         status = order["status"]
 
         if status == "pending":
-            status_fa = "در انتظار پرداخت"
+            status_fa = T("track_st_pending", "در انتظار پرداخت")
         elif status == "waiting_admin_review":
-            status_fa = "در انتظار بررسی ادمین"
+            status_fa = T("track_st_review", "در انتظار بررسی ادمین")
         elif status == "waiting_delivery":
-            status_fa = "در انتظار تحویل اشتراک"
+            status_fa = T("track_st_delivery", "در انتظار تحویل اشتراک")
         elif status == "approved":
-            status_fa = "تایید شده"
+            status_fa = T("track_st_approved", "تایید شده")
         elif status == "rejected":
-            status_fa = "رد شده"
+            status_fa = T("track_st_rejected", "رد شده")
         else:
             status_fa = status
 
@@ -164,13 +167,17 @@ async def track_purchase_handler(message: Message):
             order["price_toman"]
         )
 
-        text += (
-            f"🧾 سفارش #{order['id']}\n"
-            f"سرویس: {order['service_name']}\n"
-            f"پلن: {order['plan_title']}\n"
-            f"مبلغ نهایی: {final_price:,} تومان\n"
-            f"وضعیت: {status_fa}\n"
-            f"تاریخ ثبت: {order['created_at']}\n\n"
+        text += TF(
+            "track_item",
+            "🧾 سفارش #{order_id}\n"
+            "سرویس: {service}\n"
+            "پلن: {plan}\n"
+            "مبلغ نهایی: {price} تومان\n"
+            "وضعیت: {status}\n"
+            "تاریخ ثبت: {date}\n\n",
+            order_id=order["id"], service=order["service_name"],
+            plan=order["plan_title"], price="{:,}".format(final_price),
+            status=status_fa, date=order["created_at"],
         )
 
     await send_banner(message, "tracking", caption=text)
@@ -188,33 +195,41 @@ async def profile_handler(message: Message):
         if sub["status"] == "active"
     ]
 
-    text = (
+    text = TF(
+        "acct_title",
         "👑 پروفایل کاربری شما\n"
         "━━━━━━━━━━━━━━\n\n"
-        f"👤 نام: {user.full_name}\n"
-        f"🆔 آیدی عددی: <code>{user.id}</code>\n"
-        f"🔗 یوزرنیم: @{user.username if user.username else 'ندارد'}\n\n"
-        f"🔐 کانفیگ‌های فعال: {len(active_subs)}\n"
-        f"🧾 سفارش‌های اخیر: {len(orders)}\n\n"
+        "👤 نام: {name}\n"
+        "🆔 آیدی عددی: <code>{id}</code>\n"
+        "🔗 یوزرنیم: @{username}\n\n"
+        "🔐 کانفیگ‌های فعال: {active}\n"
+        "🧾 سفارش‌های اخیر: {orders}\n\n",
+        name=user.full_name, id=user.id,
+        username=user.username if user.username else T("acct_no_username", "ندارد"),
+        active=len(active_subs), orders=len(orders),
     )
 
     if active_subs:
-        text += "✨ اشتراک‌های فعال شما:\n\n"
+        text += T("acct_subs_title", "✨ اشتراک‌های فعال شما:\n\n")
 
         for sub in active_subs[:5]:
-            text += (
-                f"💠 {sub['service_name']}\n"
-                f"پلن: {sub['plan_title']}\n"
-                f"مدت: {sub['duration_days']} روز\n"
-                f"پایان اعتبار: {sub['expires_at']}\n\n"
+            text += TF(
+                "acct_sub_item",
+                "💠 {service}\n"
+                "پلن: {plan}\n"
+                "مدت: {days} روز\n"
+                "پایان اعتبار: {expires}\n\n",
+                service=sub["service_name"], plan=sub["plan_title"],
+                days=sub["duration_days"], expires=sub["expires_at"],
             )
     else:
-        text += (
+        text += T(
+            "acct_no_subs",
             "فعلاً کانفیگ فعالی ندارید.\n"
             "برای شروع، از بخش خرید کانفیگ سرویس مناسب خودتان را انتخاب کنید.\n\n"
         )
 
-    text += "🛟 برای تمدید، تغییر پلن یا مشکل اتصال، از پشتیبانی سریع پیام بفرستید."
+    text += T("acct_footer", "🛟 برای تمدید، تغییر پلن یا مشکل اتصال، از پشتیبانی سریع پیام بفرستید.")
 
     await send_banner(
         message,
@@ -242,27 +257,32 @@ async def referral_handler(message: Message):
     await send_content_page(
         message=message,
         key="referral",
-        fallback_text=(
+        fallback_text=T(
+            "refm_fallback",
             "🎁 دعوت دوستان\n\n"
             "لینک دعوت اختصاصی خودتان را بفرستید. بعد از خرید موفق دوستتان، یک هدیه ویژه برای تمدید یا خرید بعدی شما ثبت می‌شود."
         )
     )
 
-    text = (
-        f"\n\n🔗 لینک دعوت اختصاصی شما:\n"
-        f"{referral_link}\n\n"
-        f"👥 تعداد دعوت‌شده‌ها: {referral_count}\n\n"
+    text = TF(
+        "refm_stats",
+        "\n\n🔗 لینک دعوت اختصاصی شما:\n"
+        "{link}\n\n"
+        "👥 تعداد دعوت‌شده‌ها: {count}\n\n"
         "🎁 هدیه دعوت:\n"
-        "بعد از خرید موفق فرد دعوت‌شده، پاداش شما در سوابق دعوت ثبت می‌شود و پشتیبانی برای اعمال هدیه راهنمایی‌تان می‌کند.\n\n"
+        "بعد از خرید موفق فرد دعوت‌شده، پاداش شما در سوابق دعوت ثبت می‌شود و پشتیبانی برای اعمال هدیه راهنمایی‌تان می‌کند.\n\n",
+        link=referral_link, count=referral_count,
     )
 
     if rewards:
-        text += "آخرین پاداش‌های شما:\n\n"
+        text += T("refm_rewards_title", "آخرین پاداش‌های شما:\n\n")
 
         for reward in rewards:
-            text += (
-                f"سفارش #{reward['order_id']}\n"
-                f"هدیه ثبت‌شده: {reward['bonus_days']} روز اعتبار ویژه\n\n"
+            text += TF(
+                "refm_reward_item",
+                "سفارش #{order_id}\n"
+                "هدیه ثبت‌شده: {days} روز اعتبار ویژه\n\n",
+                order_id=reward["order_id"], days=reward["bonus_days"],
             )
 
     await message.answer(text)
@@ -271,7 +291,8 @@ async def referral_handler(message: Message):
 async def send_faq_list(message_or_callback):
     faqs = get_active_faqs()
 
-    text = (
+    text = T(
+        "faq_title",
         "❓ <b>سوالات متداول WGV</b>\n"
         "━━━━━━━━━━━━━━\n\n"
         "پاسخ سوالات پرتکرار درباره خرید، پرداخت، تحویل کانفیگ و اتصال را از لیست زیر انتخاب کنید."
@@ -279,10 +300,10 @@ async def send_faq_list(message_or_callback):
 
     if not faqs:
         if isinstance(message_or_callback, CallbackQuery):
-            await message_or_callback.message.edit_text("فعلاً سوالی ثبت نشده است.")
+            await message_or_callback.message.edit_text(T("faq_empty", "فعلاً سوالی ثبت نشده است."))
             await message_or_callback.answer()
         else:
-            await message_or_callback.answer("فعلاً سوالی ثبت نشده است.")
+            await message_or_callback.answer(T("faq_empty", "فعلاً سوالی ثبت نشده است."))
         return
 
     if isinstance(message_or_callback, CallbackQuery):
@@ -311,18 +332,20 @@ async def faq_answer_handler(callback: CallbackQuery):
     faq = get_faq_by_id(faq_id)
 
     if not faq:
-        await callback.answer("این سوال پیدا نشد.", show_alert=True)
+        await callback.answer(T("faq_not_found", "این سوال پیدا نشد."), show_alert=True)
         return
 
-    text = (
+    text = TF(
+        "faq_answer",
         "💬 <b>پاسخ سوال</b>\n"
         "━━━━━━━━━━━━━━\n\n"
-        f"<b>{faq['question']}</b>\n\n"
-        f"{faq['answer']}"
+        "<b>{question}</b>\n\n"
+        "{answer}",
+        question=faq["question"], answer=faq["answer"],
     )
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬅️ بازگشت به سوالات", callback_data="faq:list")]
+        [InlineKeyboardButton(text=T("faq_btn_back", "⬅️ بازگشت به سوالات"), callback_data="faq:list")]
     ])
 
     try:

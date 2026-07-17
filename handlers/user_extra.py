@@ -14,7 +14,7 @@ from database.db import (
     get_user_subscriptions, get_subscription_by_order,
 )
 from handlers.btn_filter import Btn
-from services.ui_texts import T
+from services.ui_texts import T, TF
 
 router = Router()
 
@@ -75,18 +75,19 @@ def _extract_config_link(sub: dict) -> str:
 def _remaining_text(sub: dict) -> str:
     exp = sub.get("expires_at")
     if not exp:
-        return "♾ بدون انقضا"
+        return T("u_no_expiry_long", "♾ بدون انقضا")
     dt = _parse_dt(exp)
     if not dt:
-        return "📅 انقضا: " + str(exp)
+        return TF("u_expiry_at", "📅 انقضا: {date}", date=exp)
     delta = dt - datetime.now()
     if delta.total_seconds() <= 0:
-        return "⛔️ منقضی شده"
+        return T("u_expired", "⛔️ منقضی شده")
     days = delta.days
     hours = int(delta.seconds // 3600)
     if days > 0:
-        return "⏳ باقیمانده: " + _fa(days) + " روز و " + _fa(hours) + " ساعت"
-    return "⏳ باقیمانده: " + _fa(hours) + " ساعت"
+        return TF("u_remaining_dh", "⏳ باقیمانده: {days} روز و {hours} ساعت",
+                  days=_fa(days), hours=_fa(hours))
+    return TF("u_remaining_h", "⏳ باقیمانده: {hours} ساعت", hours=_fa(hours))
 
 
 async def _send_subs_list(target, uid: int):
@@ -103,14 +104,15 @@ async def _send_subs_list(target, uid: int):
     for s in subs:
         _m = _sub_meta(uid, s["order_id"])
         title = (_m.get("config_name") or s.get("plan_title")
-                 or s.get("service_name") or "اشتراک").strip()
+                 or s.get("service_name") or T("subs_item_fallback", "اشتراک")).strip()
         if len(title) > 40:
             title = title[:40] + "…"
         kb_rows.append([_btn(item_emoji + " " + title, "mysub:" + str(s["order_id"]))])
     kb_rows.append(_back)
-    text = (T("subs_title", "📦 اشتراک‌های فعال شما") +
-            " (" + _fa(len(subs)) + " مورد):\n\n" +
-            T("subs_hint", "برای مشاهده جزئیات، حجم و کانفیگ، انتخاب کنید:"))
+    text = TF("subs_list_title", "{title} ({count} مورد):\n\n{hint}",
+              title=T("subs_title", "📦 اشتراک‌های فعال شما"),
+              count=_fa(len(subs)),
+              hint=T("subs_hint", "برای مشاهده جزئیات، حجم و کانفیگ، انتخاب کنید:"))
     kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
     sent = False
     try:
@@ -200,29 +202,30 @@ def _sub_meta(telegram_id: int, order_id: int) -> dict:
 def _months_label(days: int) -> str:
     d = int(days or 0)
     if d <= 0:
-        return "بدون انقضا"
+        return T("u_no_expiry_plain", "بدون انقضا")
     months = round(d / 30)
     if months >= 1:
-        return "\u200f" + str(months) + " ماهه"
-    return "\u200f" + str(d) + " روزه"
+        return "\u200f" + str(months) + T("u_month_suffix", " ماهه")
+    return "\u200f" + str(d) + T("u_day_suffix", " روزه")
 
 
 def _remaining_only(sub: dict) -> str:
     """فقط مقدار زمان باقیمانده (بدون برچسب) — با ایموجی تقویم در برچسب نمایش داده می‌شود."""
     exp = sub.get("expires_at")
     if not exp:
-        return "♾ بدون انقضا"
+        return T("u_no_expiry_long", "♾ بدون انقضا")
     dt = _parse_dt(exp)
     if not dt:
         return str(exp)
     delta = dt - datetime.now()
     if delta.total_seconds() <= 0:
-        return "⛔️ منقضی شده"
+        return T("u_expired", "⛔️ منقضی شده")
     days = delta.days
     hours = int(delta.seconds // 3600)
     if days > 0:
-        return "\u200f" + _fa(days) + " روز و " + _fa(hours) + " ساعت"
-    return "\u200f" + _fa(hours) + " ساعت"
+        return "\u200f" + TF("u_dh", "{days} روز و {hours} ساعت",
+                             days=_fa(days), hours=_fa(hours))
+    return "\u200f" + TF("u_h", "{hours} ساعت", hours=_fa(hours))
 
 
 async def _build_sub_detail(telegram_id: int, order_id: int):
@@ -256,14 +259,14 @@ async def _build_sub_detail(telegram_id: int, order_id: int):
                     remain_gb = round((total - used) / (1024 ** 3), 2)
                     pct = min(100, int(used / total * 100))
                     bar = "█" * (pct // 10) + "░" * (10 - pct // 10)
-                    remain_line = "\u200f" + _fa(remain_gb) + " گیگ"
+                    remain_line = "\u200f" + _fa(remain_gb) + T("u_gig", " گیگ")
                     pct_line = "[" + bar + "] " + _fa(pct) + "%"
                 else:
-                    remain_line = "♾ نامحدود"
+                    remain_line = T("u_unlimited_long", "♾ نامحدود")
     except Exception:
         pass
 
-    gb_txt = ("\u200f" + _fa(meta["gb"]) + " گیگ") if meta["gb"] else "نامحدود"
+    gb_txt = ("\u200f" + _fa(meta["gb"]) + T("u_gig", " گیگ")) if meta["gb"] else T("u_unlimited", "نامحدود")
 
     text = (
         T("subs_lbl_name", "🏷 نام سرویس:") + " " + (meta["config_name"] or "—") + "\n\n"
@@ -279,7 +282,7 @@ async def _build_sub_detail(telegram_id: int, order_id: int):
     if config_link:
         text += T("subs_lbl_link", "🔗 لینک کانفیگ:") + "\n<code>" + config_link + "</code>"
     elif sub.get("delivery_file_id"):
-        text += "📎 کانفیگ به‌صورت فایل ارسال شده — دکمه زیر را بزنید."
+        text += T("subs_file_note", "📎 کانفیگ به‌صورت فایل ارسال شده — دکمه زیر را بزنید.")
 
     rows = []
     if config_link.startswith(_LINK_PREFIXES):
@@ -295,10 +298,10 @@ async def _build_sub_detail(telegram_id: int, order_id: int):
 @router.callback_query(F.data.startswith("mysub:"))
 async def my_sub_detail(cb: CallbackQuery):
     order_id = int(cb.data.split(":")[1])
-    await cb.answer("⏳ در حال دریافت اطلاعات...", show_alert=False)
+    await cb.answer(T("subs_loading", "⏳ در حال دریافت اطلاعات..."), show_alert=False)
     text, kb = await _build_sub_detail(cb.from_user.id, order_id)
     if not text:
-        return await cb.answer("اشتراک پیدا نشد", show_alert=True)
+        return await cb.answer(T("subs_not_found", "اشتراک پیدا نشد"), show_alert=True)
     try:
         # اگر پیام قبلی متنی است ویرایشش کن؛ اگر عکس/بنر است پاکش کن تا چت شلوغ نشود
         if cb.message.photo or cb.message.caption is not None:
@@ -338,7 +341,7 @@ async def my_sub_delete_confirm(cb: CallbackQuery):
 @router.callback_query(F.data.startswith("mysub_delok:"))
 async def my_sub_delete_do(cb: CallbackQuery):
     order_id = int(cb.data.split(":")[1])
-    await cb.answer("⏳ در حال حذف...", show_alert=False)
+    await cb.answer(T("subs_deleting", "⏳ در حال حذف..."), show_alert=False)
     # اکانت X-UI مربوط به این سفارش
     from database.db import get_xui_account_by_order, get_connection
     acc = get_xui_account_by_order(order_id)
@@ -372,17 +375,17 @@ async def my_sub_qr(cb: CallbackQuery):
     sub = get_subscription_by_order(cb.from_user.id, order_id)
     link = _extract_config_link(sub) if sub else ""
     if not link:
-        return await cb.answer("لینک کانفیگ موجود نیست", show_alert=True)
-    await cb.answer("⏳ در حال ساخت QR...", show_alert=False)
+        return await cb.answer(T("subs_no_link", "لینک کانفیگ موجود نیست"), show_alert=True)
+    await cb.answer(T("subs_qr_making", "⏳ در حال ساخت QR..."), show_alert=False)
     qr_bytes = _make_qr(link)
     if qr_bytes:
         await cb.bot.send_photo(
             chat_id=cb.from_user.id,
             photo=BufferedInputFile(qr_bytes, filename="qr.png"),
-            caption="📱 اشتراک #" + _fa(order_id),
+            caption=TF("subs_qr_caption", "📱 اشتراک #{order_id}", order_id=_fa(order_id)),
         )
     else:
-        await cb.message.reply("📱 لینک کانفیگ:\n\n<code>" + link + "</code>")
+        await cb.message.reply(TF("subs_link_only", "📱 لینک کانفیگ:\n\n<code>{link}</code>", link=link))
 
 
 @router.callback_query(F.data.startswith("mysub_file:"))
@@ -390,11 +393,11 @@ async def my_sub_file(cb: CallbackQuery):
     order_id = int(cb.data.split(":")[1])
     sub = get_subscription_by_order(cb.from_user.id, order_id)
     if not sub or not sub.get("delivery_file_id"):
-        return await cb.answer("فایلی برای این اشتراک موجود نیست", show_alert=True)
+        return await cb.answer(T("subs_no_file", "فایلی برای این اشتراک موجود نیست"), show_alert=True)
     await cb.answer()
     fid = sub["delivery_file_id"]
     ft = sub.get("delivery_file_type")
-    cap = sub.get("delivery_text") or "📎 کانفیگ شما"
+    cap = sub.get("delivery_text") or T("subs_file_caption", "📎 کانفیگ شما")
     try:
         if ft == "photo":
             await cb.bot.send_photo(cb.from_user.id, fid, caption=cap)
@@ -405,7 +408,7 @@ async def my_sub_file(cb: CallbackQuery):
         else:
             await cb.message.answer(cap)
     except Exception:
-        await cb.message.answer("❌ ارسال فایل ناموفق بود.")
+        await cb.message.answer(T("subs_file_failed", "❌ ارسال فایل ناموفق بود."))
 
 
 @router.callback_query(F.data == "u:subs")
@@ -437,19 +440,23 @@ async def referral_menu(msg: Message):
     code = get_or_create_referral_code(msg.from_user.id)
     stats = get_referral_stats(msg.from_user.id)
 
-    text = (
+    text = TF(
+        "ref_title",
         "🎁 دعوت دوستان\n\n"
-        "کد دعوت شما: <code>" + code + "</code>\n\n"
+        "کد دعوت شما: <code>{code}</code>\n\n"
         "📊 آمار:\n"
-        "👥 تعداد معرفی‌ها: " + str(stats.get("referred_count", 0)) + "\n"
-        "💰 کل کمیسیون: " + str(stats.get("total_commission", 0)) + " تومان\n\n"
+        "👥 تعداد معرفی‌ها: {count}\n"
+        "💰 کل کمیسیون: {commission} تومان\n\n"
         "دوستان رو دعوت کن و کمیسیون بگیر!\n\n"
-        "لینک دعوت:\nhttps://t.me/?start=ref_" + code
+        "لینک دعوت:\nhttps://t.me/?start=ref_{code}",
+        code=code,
+        count=stats.get("referred_count", 0),
+        commission=stats.get("total_commission", 0),
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [_btn("📋 کپی کد دعوت", "referral:info")],
-        [_btn("⬅️ بازگشت", "u:menu")],
+        [_btn(T("ref_btn_copy", "📋 کپی کد دعوت"), "referral:info")],
+        [_btn(T("ref_btn_back", "⬅️ بازگشت"), "u:menu")],
     ])
     await msg.answer(text, reply_markup=kb)
 
@@ -459,8 +466,10 @@ async def referral_info(cb: CallbackQuery):
     from services.referral_service import get_or_create_referral_code
     code = get_or_create_referral_code(cb.from_user.id)
     await cb.answer(
-        "کد دعوت شما: " + code + "\n\n"
-        "این کد رو به دوستانت بده تا وقتی ثبت‌نام می‌کنن به عنوان معرف ثبت بشی",
+        TF("ref_info_alert",
+           "کد دعوت شما: {code}\n\n"
+           "این کد رو به دوستانت بده تا وقتی ثبت‌نام می‌کنن به عنوان معرف ثبت بشی",
+           code=code),
         show_alert=True
     )
 
@@ -474,17 +483,19 @@ class PartnerStates(StatesGroup):
 async def partnership_start(msg: Message, state: FSMContext):
     if get_sub_admin(msg.from_user.id):
         return await msg.answer(
-            "✅ شما در حال حاضر همکار (ساب‌ادمین) هستید.\n"
-            "برای مشاهده پنل خود دکمه آمار فروش را بزنید."
+            T("coop_already",
+              "✅ شما در حال حاضر همکار (ساب‌ادمین) هستید.\n"
+              "برای مشاهده پنل خود دکمه آمار فروش را بزنید.")
         )
     await state.clear()
     await msg.answer(
-        "🤝 درخواست همکاری\n\n"
-        "یک پیام کوتاه درباره خودت و روش کارت بنویس.\n"
-        "مثلاً: من در کانال X فعالم و می‌تونم ماهی Y تا بفروشم.\n\n"
-        "درخواستت به صورت تیکت برای مدیر ارسال می‌شه.",
+        T("coop_ask",
+          "🤝 درخواست همکاری\n\n"
+          "یک پیام کوتاه درباره خودت و روش کارت بنویس.\n"
+          "مثلاً: من در کانال X فعالم و می‌تونم ماهی Y تا بفروشم.\n\n"
+          "درخواستت به صورت تیکت برای مدیر ارسال می‌شه."),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [_btn("⬅️ بازگشت", "u:menu")]
+            [_btn(T("coop_btn_back", "⬅️ بازگشت"), "u:menu")]
         ]),
     )
     await state.set_state(PartnerStates.waiting_message)
@@ -533,8 +544,10 @@ async def partnership_submit(msg: Message, state: FSMContext):
             pass
 
     await msg.answer(
-        "✅ درخواست شما (تیکت #" + str(ticket_id) + ") ارسال شد.\n"
-        "منتظر پاسخ مدیر باشید."
+        TF("coop_sent",
+           "✅ درخواست شما (تیکت #{ticket_id}) ارسال شد.\n"
+           "منتظر پاسخ مدیر باشید.",
+           ticket_id=ticket_id)
     )
 
 
@@ -559,7 +572,7 @@ async def partner_approve(cb: CallbackQuery):
     try:
         await cb.bot.send_message(
             chat_id=target_id,
-            text="🎉 درخواست همکاری شما تأیید شد!\nاکنون به عنوان همکار ثبت شدید."
+            text=T("coop_approved_user", "🎉 درخواست همکاری شما تأیید شد!\nاکنون به عنوان همکار ثبت شدید.")
         )
     except Exception:
         pass
@@ -580,7 +593,7 @@ async def partner_reject(cb: CallbackQuery):
     try:
         await cb.bot.send_message(
             chat_id=target_id,
-            text="متأسفانه درخواست همکاری شما در حال حاضر تأیید نشد."
+            text=T("coop_rejected_user", "متأسفانه درخواست همکاری شما در حال حاضر تأیید نشد.")
         )
     except Exception:
         pass
