@@ -1,4 +1,5 @@
 from config.settings import USDT_TOMAN_RATE, TRX_TOMAN_RATE
+from services.ui_texts import TF
 
 
 def _safe_float(value, default=0.0):
@@ -32,17 +33,17 @@ def format_crypto_amounts(price_toman: int) -> str:
     if usdt <= 0 or trx <= 0:
         return ""
 
-    return (
-        f"💵 معادل تقریبی: <b>{usdt:.2f} USDT</b>\n"
-        f"🔺 معادل تقریبی: <b>{trx:.2f} TRX</b>"
+    return TF(
+        "price_crypto_block",
+        "💵 معادل تقریبی: <b>{usdt} USDT</b>\n🔺 معادل تقریبی: <b>{trx} TRX</b>",
+        usdt="{:.2f}".format(usdt), trx="{:.2f}".format(trx),
     )
 
 
 def payment_price_block(price_toman: int) -> str:
     crypto_text = format_crypto_amounts(price_toman)
+    toman_line = TF("price_toman_line", "💰 مبلغ تومانی: <b>{price} تومان</b>",
+                    price="{:,}".format(price_toman))
     if crypto_text:
-        return (
-            f"💰 مبلغ تومانی: <b>{price_toman:,} تومان</b>\n"
-            f"{crypto_text}"
-        )
-    return f"💰 مبلغ تومانی: <b>{price_toman:,} تومان</b>"
+        return toman_line + "\n" + crypto_text
+    return toman_line

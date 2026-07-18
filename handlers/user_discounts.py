@@ -75,15 +75,15 @@ def get_discount_by_code(code: str):
 
 def is_discount_valid(discount: dict):
     if not discount:
-        return False, "کد تخفیف پیدا نشد."
+        return False, T("disc_err_notfound", "کد تخفیف پیدا نشد.")
 
     if discount["used_count"] >= discount["max_uses"]:
-        return False, "ظرفیت استفاده از این کد تخفیف تمام شده است."
+        return False, T("disc_err_capacity", "ظرفیت استفاده از این کد تخفیف تمام شده است.")
 
     expires_at = datetime.strptime(discount["expires_at"], "%Y-%m-%d %H:%M:%S")
 
     if expires_at < datetime.now():
-        return False, "این کد تخفیف منقضی شده است."
+        return False, T("disc_err_expired", "این کد تخفیف منقضی شده است.")
 
     return True, None
 

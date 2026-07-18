@@ -233,12 +233,15 @@ async def notify_referral_reward(bot, reward_data: dict):
     if reward_amount <= 0:
         return
     try:
+        from services.ui_texts import TF
         await bot.send_message(
             chat_id=reward_data["inviter_id"],
-            text=(
+            text=TF(
+                "ref_reward_notify",
                 "🎁 کمیسیون رفرال دریافت کردید!\n\n"
-                "مبلغ: " + "{:,}".format(reward_amount) + " تومان\n"
-                "به کیف\u200cپول شما اضافه شد."
+                "مبلغ: {amount} تومان\n"
+                "به کیف‌پول شما اضافه شد.",
+                amount="{:,}".format(reward_amount),
             )
         )
     except Exception:
