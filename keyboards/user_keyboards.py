@@ -299,24 +299,30 @@ def discount_decision_for_order(order_id: int):
 
 
 def services_keyboard(services: list, category: str):
+    from services.ui_texts import T, TF
     keyboard = []
     for service in services:
         keyboard.append([InlineKeyboardButton(
-            text="🔘 " + service["name"],
+            text=TF("svckb_item", "🔘 {name}", name=service["name"]),
             callback_data="service:" + str(service["id"])
         )])
-    keyboard.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="shop_back:categories")])
+    keyboard.append([InlineKeyboardButton(text=T("shop_btn_back", "⬅️ بازگشت"),
+                                          callback_data="shop_back:categories")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
 def service_buy_keyboard(service_id: int):
+    from services.ui_texts import T
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💎 مشاهده پلن‌ها", callback_data="buy_service:" + str(service_id))],
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="shop_back:categories")],
+        [InlineKeyboardButton(text=T("svckb_view_plans", "💎 مشاهده پلن‌ها"),
+                              callback_data="buy_service:" + str(service_id))],
+        [InlineKeyboardButton(text=T("shop_btn_back", "⬅️ بازگشت"),
+                              callback_data="shop_back:categories")],
     ])
 
 
 def plans_keyboard(plans: list, service_id: int, telegram_id: int = None):
+    from services.ui_texts import T, TF
     keyboard = []
     for plan in plans:
         price = plan["price_toman"]
@@ -327,75 +333,83 @@ def plans_keyboard(plans: list, service_id: int, telegram_id: int = None):
             except Exception:
                 pass
         keyboard.append([InlineKeyboardButton(
-            text=plan["title"] + " — " + "{:,}".format(price) + " تومان",
+            text=TF("plankb_item", "{title} — {price} تومان",
+                    title=plan["title"], price="{:,}".format(price)),
             callback_data="select_plan:" + str(plan["id"])
         )])
-    keyboard.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="shop_back:categories")])
+    keyboard.append([InlineKeyboardButton(text=T("shop_btn_back", "⬅️ بازگشت"),
+                                          callback_data="shop_back:categories")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
 def payment_methods_keyboard(plan_id: int):
+    from services.ui_texts import T
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💳 پرداخت کارت‌به‌کارت",
+        [InlineKeyboardButton(text=T("paykb_card_long", "💳 پرداخت کارت‌به‌کارت"),
                               callback_data="payment_currency:" + str(plan_id) + ":toman")],
-        [InlineKeyboardButton(text="💰 پرداخت از کیف‌پول",
+        [InlineKeyboardButton(text=T("paykb_wallet", "💰 پرداخت از کیف‌پول"),
                               callback_data="payment_currency:" + str(plan_id) + ":wallet")],
     ])
 
 
 def payment_methods_keyboard_with_discount(plan_id: int, discount_code: str):
+    from services.ui_texts import T
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💳 پرداخت کارت‌به‌کارت",
+        [InlineKeyboardButton(text=T("paykb_card_long", "💳 پرداخت کارت‌به‌کارت"),
                               callback_data="payment_currency_discount:" + str(plan_id) + ":toman:" + discount_code)],
-        [InlineKeyboardButton(text="💰 پرداخت از کیف‌پول",
+        [InlineKeyboardButton(text=T("paykb_wallet", "💰 پرداخت از کیف‌پول"),
                               callback_data="payment_currency_discount:" + str(plan_id) + ":wallet:" + discount_code)],
     ])
 
 
 def payment_methods_for_order_keyboard(order_id: int):
+    from services.ui_texts import T
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💳 کارت‌به‌کارت",
+        [InlineKeyboardButton(text=T("paykb_card", "💳 کارت‌به‌کارت"),
                               callback_data="payment_method:" + str(order_id) + ":card")],
-        [InlineKeyboardButton(text="💰 پرداخت از کیف‌پول",
+        [InlineKeyboardButton(text=T("paykb_wallet", "💰 پرداخت از کیف‌پول"),
                               callback_data="payment_method:" + str(order_id) + ":wallet")],
     ])
 
 
 def toman_payment_keyboard(order_id: int):
+    from services.ui_texts import T
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💳 کارت‌به‌کارت",
+        [InlineKeyboardButton(text=T("paykb_card", "💳 کارت‌به‌کارت"),
                               callback_data="payment_method:" + str(order_id) + ":card")],
-        [InlineKeyboardButton(text="💰 پرداخت از کیف‌پول",
+        [InlineKeyboardButton(text=T("paykb_wallet", "💰 پرداخت از کیف‌پول"),
                               callback_data="payment_method:" + str(order_id) + ":wallet")],
     ])
 
 
 def starlink_volume_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="10 گیگابایت", callback_data="starlink_volume:10"),
-         InlineKeyboardButton(text="20 گیگابایت", callback_data="starlink_volume:20")],
-        [InlineKeyboardButton(text="30 گیگابایت", callback_data="starlink_volume:30"),
-         InlineKeyboardButton(text="40 گیگابایت", callback_data="starlink_volume:40")],
-        [InlineKeyboardButton(text="50 گیگابایت", callback_data="starlink_volume:50"),
-         InlineKeyboardButton(text="60 گیگابایت", callback_data="starlink_volume:60")],
-        [InlineKeyboardButton(text="70 گیگابایت", callback_data="starlink_volume:70"),
-         InlineKeyboardButton(text="80 گیگابایت", callback_data="starlink_volume:80")],
-        [InlineKeyboardButton(text="90 گیگابایت", callback_data="starlink_volume:90"),
-         InlineKeyboardButton(text="100 گیگابایت", callback_data="starlink_volume:100")],
-        [InlineKeyboardButton(text="✍️ حجم دلخواه", callback_data="starlink_volume:custom")],
-    ])
+    """دکمه‌های حجم؛ برچسب هر دکمه از قالب volkb_item ساخته می‌شود."""
+    from services.ui_texts import T, TF
+    tpl = T("volkb_item", "{gb} گیگابایت")
+    rows = []
+    for a, b in [(10, 20), (30, 40), (50, 60), (70, 80), (90, 100)]:
+        rows.append([
+            InlineKeyboardButton(text=TF("volkb_item", tpl, gb=a), callback_data="starlink_volume:" + str(a)),
+            InlineKeyboardButton(text=TF("volkb_item", tpl, gb=b), callback_data="starlink_volume:" + str(b)),
+        ])
+    rows.append([InlineKeyboardButton(text=T("volkb_custom", "✍️ حجم دلخواه"),
+                                      callback_data="starlink_volume:custom")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def shop_category_keyboard():
+    from services.ui_texts import T
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="استارلینک اختصاصی", callback_data="shop_category:starlink")],
+        [InlineKeyboardButton(text=T("shop_cat_starlink", "استارلینک اختصاصی"),
+                              callback_data="shop_category:starlink")],
     ])
 
 
 def discount_code_keyboard(order_id: int):
+    from services.ui_texts import T
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✏️ کد تخفیف دارم",
+        [InlineKeyboardButton(text=T("disckb_have", "✏️ کد تخفیف دارم"),
                               callback_data="discount:apply:" + str(order_id)),
-         InlineKeyboardButton(text="⏭️ ادامه",
+         InlineKeyboardButton(text=T("disckb_skip", "⏭️ ادامه"),
                               callback_data="payment_order:" + str(order_id) + ":toman")],
     ])
