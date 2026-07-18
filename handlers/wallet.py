@@ -15,7 +15,7 @@ from database.wallet import (
 from database.db import save_user, get_user, get_connection
 from config.settings import ADMIN_IDS
 from handlers.btn_filter import Btn
-from services.ui_texts import T
+from services.ui_texts import T, TF
 
 router = Router()
 
@@ -66,10 +66,10 @@ def _btn(t, d):
 
 def wallet_main_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [_btn("💰 موجودی", "wallet:balance")],
-        [_btn("➕ شارژ کیف‌پول", "wallet:charge_start")],
-        [_btn("📊 تاریخچه", "wallet:history")],
-        [_btn("⬅️ بازگشت", "u:menu")],
+        [_btn(T("wal_btn_balance", "💰 موجودی"), "wallet:balance")],
+        [_btn(T("wal_btn_charge", "➕ شارژ کیف‌پول"), "wallet:charge_start")],
+        [_btn(T("wal_btn_history", "📊 تاریخچه"), "wallet:history")],
+        [_btn(T("wal_btn_back", "⬅️ بازگشت"), "u:menu")],
     ])
 
 
@@ -117,7 +117,7 @@ async def wallet_entry(msg: Message):
     save_user(msg.from_user.id, msg.from_user.full_name, msg.from_user.username)
     w = get_or_create_wallet(msg.from_user.id)
     await msg.answer(
-        "💰 کیف‌پول شما\n\nموجودی: {:,} تومان".format(w["balance_toman"]),
+        TF("wal_home", "💰 کیف‌پول شما\n\nموجودی: {balance} تومان", balance="{:,}".format(w["balance_toman"])),
         reply_markup=wallet_main_kb()
     )
 
@@ -125,7 +125,7 @@ async def wallet_entry(msg: Message):
 @router.callback_query(F.data == "wallet:home")
 async def wallet_home(cb: CallbackQuery):
     w = get_or_create_wallet(cb.from_user.id)
-    text = "💰 کیف‌پول شما\n\nموجودی: {:,} تومان".format(w["balance_toman"])
+    text = TF("wal_home", "💰 کیف‌پول شما\n\nموجودی: {balance} تومان", balance="{:,}".format(w["balance_toman"]))
     try:
         if cb.message.photo or cb.message.caption is not None:
             raise ValueError("photo message")
@@ -142,7 +142,8 @@ async def wallet_home(cb: CallbackQuery):
 @router.callback_query(F.data == "wallet:balance")
 async def wallet_balance(cb: CallbackQuery):
     w = get_or_create_wallet(cb.from_user.id)
-    await cb.answer("💰 موجودی: {:,} تومان".format(w["balance_toman"]), show_alert=True)
+    await cb.answer(TF("wal_balance", "💰 موجودی: {amount} تومان",
+                       amount="{:,}".format(w["balance_toman"])), show_alert=True)
 
 
 @router.callback_query(F.data == "wallet:history")
@@ -150,16 +151,18 @@ async def wallet_history(cb: CallbackQuery):
     txs = get_wallet_transactions(cb.from_user.id, limit=10)
     if not txs:
         return await cb.message.edit_text(
-            "تاریخچه‌ای ثبت نشده.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[_btn("⬅️ بازگشت", "wallet:home")]])
+            T("wal_hist_empty", "تاریخچه‌ای ثبت نشده."),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[_btn(T("wal_btn_back", "⬅️ بازگشت"), "wallet:home")]])
         )
-    text = "📊 تاریخچه:\n\n"
+    text = T("wal_hist_title", "📊 تاریخچه:\n\n")
     for tr in txs:
         ico = "➕" if tr["type"] == "charge" else "➖"
-        text += ico + " {:,}T — {}\n".format(tr["amount_toman"], tr["description"] or "")
+        text += TF("wal_hist_item", "{icon} {amount}T — {desc}\n",
+                   icon=ico, amount="{:,}".format(tr["amount_toman"]),
+                   desc=tr["description"] or "")
     await cb.message.edit_text(
         text,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[_btn("⬅️ بازگشت", "wallet:home")]])
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[_btn(T("wal_btn_back", "⬅️ بازگشت"), "wallet:home")]])
     )
     await cb.answer()
 
@@ -168,8 +171,8 @@ async def wallet_history(cb: CallbackQuery):
 async def charge_start(cb: CallbackQuery, state: FSMContext):
     await state.clear()
     await cb.message.edit_text(
-        "➕ شارژ کیف‌پول\n\nمبلغ رو به تومان وارد کن (فقط عدد):\nمثال: 500000",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[_btn("⬅️ انصراف", "wallet:home")]]),
+        T("wal_charge_ask", "➕ شارژ کیف‌پول\n\nمبلغ رو به تومان وارد کن (فقط عدد):\nمثال: 500000"),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[_btn(T("wal_btn_cancel", "⬅️ انصراف"), "wallet:home")]]),
     )
     await state.set_state(WalletStates.waiting_for_charge_amount)
     await cb.answer()
@@ -178,21 +181,23 @@ async def charge_start(cb: CallbackQuery, state: FSMContext):
 @router.message(WalletStates.waiting_for_charge_amount)
 async def charge_amount(msg: Message, state: FSMContext):
     if not msg.text or not msg.text.strip().isdigit():
-        return await msg.answer("❌ فقط عدد قبول میشه:")
+        return await msg.answer(T("wal_err_numeric", "❌ فقط عدد قبول میشه:"))
     amount = int(msg.text.strip())
     if amount < 1000:
-        return await msg.answer("❌ حداقل ۱,۰۰۰ تومان:")
+        return await msg.answer(T("wal_err_min", "❌ حداقل ۱,۰۰۰ تومان:"))
     if amount > 100_000_000:
-        return await msg.answer("❌ حداکثر ۱۰۰,۰۰۰,۰۰۰ تومان:")
+        return await msg.answer(T("wal_err_max", "❌ حداکثر ۱۰۰,۰۰۰,۰۰۰ تومان:"))
 
     from database.db import get_setting
     card_info = get_setting("card_info", "تنظیم نشده — هد ادمین از تنظیمات وارد کند")
 
     await state.update_data(amount_toman=amount)
     await msg.answer(
-        "💳 اطلاعات کارت:\n<code>" + card_info + "</code>\n\n"
-        "مبلغ: {:,} تومان\n\n".format(amount) +
-        "لطفاً واریز کن و رسید (عکس یا متن) رو اینجا بفرست:"
+        TF("wal_card_text",
+           "💳 اطلاعات کارت:\n<code>{card}</code>\n\n"
+           "مبلغ: {amount} تومان\n\n"
+           "لطفاً واریز کن و رسید (عکس یا متن) رو اینجا بفرست:",
+           card=card_info, amount="{:,}".format(amount))
     )
     await state.set_state(WalletStates.waiting_for_payment_receipt)
 
@@ -201,7 +206,7 @@ async def charge_amount(msg: Message, state: FSMContext):
 async def charge_receipt(msg: Message, state: FSMContext):
     data = await state.get_data()
     amount = data.get("amount_toman")
-    receipt_text = msg.caption or msg.text or "رسید بدون متن"
+    receipt_text = msg.caption or msg.text or T("wal_receipt_no_text", "رسید بدون متن")
     receipt_type = "text"
     file_id = None
 
@@ -219,9 +224,11 @@ async def charge_receipt(msg: Message, state: FSMContext):
     )
 
     await msg.answer(
-        "✅ درخواست شارژ ثبت شد\n\n"
-        "مبلغ: {:,} تومان\n".format(amount) +
-        "وضعیت: ⏳ در انتظار تایید ادمین"
+        TF("wal_charge_saved",
+           "✅ درخواست شارژ ثبت شد\n\n"
+           "مبلغ: {amount} تومان\n"
+           "وضعیت: ⏳ در انتظار تایید ادمین",
+           amount="{:,}".format(amount))
     )
     await state.clear()
 
@@ -287,7 +294,9 @@ async def admin_approve_charge(cb: CallbackQuery):
 
     await cb.bot.send_message(
         chat_id=charge["telegram_id"],
-        text="✅ شارژ کیف‌پول تایید شد!\n\nمبلغ: {:,} تومان\nاکنون می‌توانید خرید کنید.".format(charge["amount_toman"])
+        text=TF("wal_approved_user",
+                "✅ شارژ کیف‌پول تایید شد!\n\nمبلغ: {amount} تومان\nاکنون می‌توانید خرید کنید.",
+                amount="{:,}".format(charge["amount_toman"]))
     )
 
 
@@ -316,5 +325,7 @@ async def admin_reject_charge(cb: CallbackQuery):
 
     await cb.bot.send_message(
         chat_id=charge["telegram_id"],
-        text="❌ شارژ کیف‌پول رد شد\n\nمبلغ: {:,} تومان\nدر صورت سوال با پشتیبانی تماس بگیرید.".format(charge["amount_toman"])
+        text=TF("wal_rejected_user",
+                "❌ شارژ کیف‌پول رد شد\n\nمبلغ: {amount} تومان\nدر صورت سوال با پشتیبانی تماس بگیرید.",
+                amount="{:,}".format(charge["amount_toman"]))
     )
