@@ -9,6 +9,7 @@ from aiogram.fsm.state import StatesGroup, State
 
 from database.db import get_connection, get_setting, set_setting
 from config.settings import ADMIN_IDS
+from services.ui_texts import T, TF
 
 router = Router()
 
@@ -62,17 +63,19 @@ def gb_selector_kb():
     rows = []
     for gb in steps:
         price = gb * price_per_gb
-        rows.append([_btn(f"📦 {gb} گیگ — {price:,} تومان", f"gb_buy:{gb}")])
-    rows.append([_btn("✍️ حجم دلخواه", "gb_buy:custom")])
-    rows.append([_btn("⬅️ بازگشت", "user:menu")])
+        rows.append([_btn(TF("gbp_btn_step", "📦 {gb} گیگ — {price} تومان",
+                             gb=gb, price="{:,}".format(price)), f"gb_buy:{gb}")])
+    rows.append([_btn(T("gbp_btn_custom", "✍️ حجم دلخواه"), "gb_buy:custom")])
+    rows.append([_btn(T("gbp_btn_back", "⬅️ بازگشت"), "user:menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def gb_confirm_kb(gb: int):
     price = calc_price(gb)
     return InlineKeyboardMarkup(inline_keyboard=[
-        [_btn(f"✅ تأیید خرید {gb} گیگ — {price:,} تومان", f"gb_confirm:{gb}")],
-        [_btn("⬅️ بازگشت", "gb_selector")],
+        [_btn(TF("gbp_btn_confirm", "✅ تأیید خرید {gb} گیگ — {price} تومان",
+                 gb=gb, price="{:,}".format(price)), f"gb_confirm:{gb}")],
+        [_btn(T("gbp_btn_back", "⬅️ بازگشت"), "gb_selector")],
     ])
 
 
@@ -81,9 +84,11 @@ def gb_confirm_kb(gb: int):
 async def gb_purchase_start(msg: Message):
     price_per_gb = get_price_per_gb()
     await msg.answer(
-        f"📦 خرید بر اساس حجم\n\n"
-        f"قیمت هر گیگابایت: {price_per_gb:,} تومان\n\n"
-        f"حجم مورد نظر رو انتخاب کن:",
+        TF("gbp_intro",
+           "📦 خرید بر اساس حجم\n\n"
+           "قیمت هر گیگابایت: {price} تومان\n\n"
+           "حجم مورد نظر رو انتخاب کن:",
+           price="{:,}".format(price_per_gb)),
         reply_markup=gb_selector_kb()
     )
 
@@ -93,9 +98,11 @@ async def gb_selector(cb: CallbackQuery, state: FSMContext):
     await state.clear()
     price_per_gb = get_price_per_gb()
     await cb.message.edit_text(
-        f"📦 خرید بر اساس حجم\n\n"
-        f"قیمت هر گیگابایت: {price_per_gb:,} تومان\n\n"
-        f"حجم مورد نظر رو انتخاب کن:",
+        TF("gbp_intro",
+           "📦 خرید بر اساس حجم\n\n"
+           "قیمت هر گیگابایت: {price} تومان\n\n"
+           "حجم مورد نظر رو انتخاب کن:",
+           price="{:,}".format(price_per_gb)),
         reply_markup=gb_selector_kb()
     )
     await cb.answer()
@@ -106,9 +113,11 @@ async def gb_buy(cb: CallbackQuery, state: FSMContext):
     val = cb.data.split(":")[1]
     if val == "custom":
         await cb.message.edit_text(
-            "✍️ حجم دلخواه\n\n"
-            f"قیمت هر گیگ: {get_price_per_gb():,} تومان\n\n"
-            "تعداد گیگابایت رو بفرست (عدد):"
+            TF("gbp_custom_ask",
+               "✍️ حجم دلخواه\n\n"
+               "قیمت هر گیگ: {price} تومان\n\n"
+               "تعداد گیگابایت رو بفرست (عدد):",
+               price="{:,}".format(get_price_per_gb()))
         )
         await state.set_state(GBPurchaseStates.custom_gb)
         await cb.answer()
@@ -117,10 +126,12 @@ async def gb_buy(cb: CallbackQuery, state: FSMContext):
     gb = int(val)
     price = calc_price(gb)
     await cb.message.edit_text(
-        f"📦 تأیید خرید\n\n"
-        f"حجم: {gb} گیگابایت\n"
-        f"قیمت: {price:,} تومان\n\n"
-        f"پرداخت از کیف‌پول انجام می‌شه.",
+        TF("gbp_confirm",
+           "📦 تأیید خرید\n\n"
+           "حجم: {gb} گیگابایت\n"
+           "قیمت: {price} تومان\n\n"
+           "پرداخت از کیف‌پول انجام می‌شه.",
+           gb=gb, price="{:,}".format(price)),
         reply_markup=gb_confirm_kb(gb)
     )
     await cb.answer()
@@ -129,17 +140,19 @@ async def gb_buy(cb: CallbackQuery, state: FSMContext):
 @router.message(GBPurchaseStates.custom_gb)
 async def gb_custom_amount(msg: Message, state: FSMContext):
     if not msg.text or not msg.text.isdigit():
-        return await msg.answer("فقط عدد قبول میشه")
+        return await msg.answer(T("gbp_err_numeric", "فقط عدد قبول میشه"))
     gb = int(msg.text.strip())
     if gb <= 0 or gb > 10000:
-        return await msg.answer("بین 1 تا 10000 گیگابایت وارد کن")
+        return await msg.answer(T("gbp_err_range", "بین 1 تا 10000 گیگابایت وارد کن"))
     price = calc_price(gb)
     await state.clear()
     await msg.answer(
-        f"📦 تأیید خرید\n\n"
-        f"حجم: {gb} گیگابایت\n"
-        f"قیمت: {price:,} تومان\n\n"
-        f"پرداخت از کیف‌پول انجام می‌شه.",
+        TF("gbp_confirm",
+           "📦 تأیید خرید\n\n"
+           "حجم: {gb} گیگابایت\n"
+           "قیمت: {price} تومان\n\n"
+           "پرداخت از کیف‌پول انجام می‌شه.",
+           gb=gb, price="{:,}".format(price)),
         reply_markup=gb_confirm_kb(gb)
     )
 
@@ -156,11 +169,14 @@ async def gb_confirm(cb: CallbackQuery):
     if balance < price:
         shortage = price - balance
         return await cb.answer(
-            f"موجودی کافی نیست\n\n"
-            f"نیاز: {price:,}T\n"
-            f"موجودی: {balance:,}T\n"
-            f"کمبود: {shortage:,}T\n\n"
-            f"ابتدا کیف‌پول رو شارژ کن",
+            TF("gbp_insufficient",
+               "موجودی کافی نیست\n\n"
+               "نیاز: {need}T\n"
+               "موجودی: {balance}T\n"
+               "کمبود: {shortage}T\n\n"
+               "ابتدا کیف‌پول رو شارژ کن",
+               need="{:,}".format(price), balance="{:,}".format(balance),
+               shortage="{:,}".format(shortage)),
             show_alert=True
         )
 
@@ -203,11 +219,13 @@ async def gb_confirm(cb: CallbackQuery):
             pass
 
     await cb.message.edit_text(
-        f"✅ سفارش ثبت شد\n\n"
-        f"حجم: {gb} گیگابایت\n"
-        f"قیمت: {price:,} تومان\n"
-        f"سفارش: #{order_id}\n\n"
-        f"⏳ کانفیگ اختصاصی شما توسط ادمین ارسال می‌شه"
+        TF("gbp_order_done",
+           "✅ سفارش ثبت شد\n\n"
+           "حجم: {gb} گیگابایت\n"
+           "قیمت: {price} تومان\n"
+           "سفارش: #{order_id}\n\n"
+           "⏳ کانفیگ اختصاصی شما توسط ادمین ارسال می‌شه",
+           gb=gb, price="{:,}".format(price), order_id=order_id)
     )
     await cb.answer()
 
