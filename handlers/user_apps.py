@@ -141,7 +141,7 @@ async def apps_platform_cb(cb: CallbackQuery):
     data = get_apps_data()
     apps = data.get(pkey, [])
     if not apps:
-        await cb.answer("فعلاً برنامه‌ای برای این سیستم‌عامل ثبت نشده.", show_alert=True)
+        await cb.answer(T("apps_empty", "فعلاً برنامه‌ای برای این سیستم‌عامل ثبت نشده."), show_alert=True)
         return
     header = T("apps_list_title", "📲 برنامه‌های پیشنهادی برای") + " " + _platform_label(pkey, plabel)
     hint = T("apps_list_hint", "روی هر برنامه بزنید تا به صفحهٔ دانلودش بروید:")

@@ -20,6 +20,7 @@ from aiogram.fsm.state import StatesGroup, State
 
 from database.db import get_active_servers, get_connection, save_xui_account
 from handlers.btn_filter import Btn
+from services.ui_texts import T, TF
 
 router = Router()
 
@@ -100,11 +101,12 @@ async def add_config_start(msg: Message, state: FSMContext):
     await state.clear()
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     await msg.answer(
-        "➕ افزودن کانفیگ من\n\n"
-        "اگر قبلاً کانفیگ گرفته‌ای ولی در «اشتراک‌های من» نیست، "
-        "کانفیگ (لینک کامل) یا فقط «نام کانفیگ» را بفرست تا پیدا و اضافه‌اش کنم.",
+        T("addcfg_intro",
+          "➕ افزودن کانفیگ من\n\n"
+          "اگر قبلاً کانفیگ گرفته‌ای ولی در «اشتراک‌های من» نیست، "
+          "کانفیگ (لینک کامل) یا فقط «نام کانفیگ» را بفرست تا پیدا و اضافه‌اش کنم."),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="u:menu")]
+            [InlineKeyboardButton(text=T("addcfg_btn_back", "⬅️ بازگشت"), callback_data="u:menu")]
         ]),
     )
     await state.set_state(AddConfigStates.waiting)
@@ -116,16 +118,16 @@ async def add_config_search(msg: Message, state: FSMContext):
     name = queries[0] if queries else ""
     if not queries:
         await state.clear()
-        return await msg.answer("❌ نام کانفیگ خوانده نشد. لینک کامل یا نام دقیق کانفیگ را بفرست.")
+        return await msg.answer(T("addcfg_no_name", "❌ نام کانفیگ خوانده نشد. لینک کامل یا نام دقیق کانفیگ را بفرست."))
     await state.clear()
-    await msg.answer("⏳ در حال جستجوی کانفیگ در سرورها...")
+    await msg.answer(T("addcfg_searching", "⏳ در حال جستجوی کانفیگ در سرورها..."))
 
     from services.xui_service import XUIClient
     found = None
     any_login = False
     servers = get_active_servers()
     if not servers:
-        return await msg.answer("❌ فعلاً سروری تنظیم نشده. با پشتیبانی تماس بگیر.")
+        return await msg.answer(T("addcfg_no_server", "❌ فعلاً سروری تنظیم نشده. با پشتیبانی تماس بگیر."))
 
     for server in servers:
         c = XUIClient(server)
@@ -159,13 +161,15 @@ async def add_config_search(msg: Message, state: FSMContext):
     if not found:
         if not any_login:
             return await msg.answer(
-                "❌ در حال حاضر اتصال به پنل برقرار نشد. کمی بعد دوباره تلاش کن "
-                "یا با پشتیبانی تماس بگیر."
+                T("addcfg_no_panel",
+                  "❌ در حال حاضر اتصال به پنل برقرار نشد. کمی بعد دوباره تلاش کن "
+                  "یا با پشتیبانی تماس بگیر.")
             )
         return await msg.answer(
-            "❌ کانفیگی با این مشخصات در سرورها پیدا نشد.\n\n"
-            "بهتر است «لینک کامل» کانفیگ را بفرستی (نه فقط نام) تا با شناسهٔ داخل لینک دقیق پیدا شود.\n"
-            "اگر باز هم پیدا نشد، با پشتیبانی تماس بگیر."
+            T("addcfg_not_found",
+              "❌ کانفیگی با این مشخصات در سرورها پیدا نشد.\n\n"
+              "بهتر است «لینک کامل» کانفیگ را بفرستی (نه فقط نام) تا با شناسهٔ داخل لینک دقیق پیدا شود.\n"
+              "اگر باز هم پیدا نشد، با پشتیبانی تماس بگیر.")
         )
 
     server = found["server"]
@@ -196,7 +200,7 @@ async def add_config_search(msg: Message, state: FSMContext):
             (msg.from_user.id, email),
         )
         if cur.fetchone():
-            return await msg.answer("ℹ️ این کانفیگ از قبل در «اشتراک‌های من» شما موجود است.")
+            return await msg.answer(T("addcfg_exists", "ℹ️ این کانفیگ از قبل در «اشتراک‌های من» شما موجود است."))
         cur.execute(
             """INSERT INTO orders
                (telegram_id, plan_id, service_name, plan_title, price_toman,
@@ -228,6 +232,7 @@ async def add_config_search(msg: Message, state: FSMContext):
         pass
 
     await msg.answer(
-        "✅ کانفیگ پیدا و به «اشتراک‌های من» اضافه شد.\n"
-        "حالا می‌توانی وضعیت، حجم باقیمانده و کانفیگ آپدیت‌شده‌اش را از همان بخش ببینی."
+        T("addcfg_done",
+          "✅ کانفیگ پیدا و به «اشتراک‌های من» اضافه شد.\n"
+          "حالا می‌توانی وضعیت، حجم باقیمانده و کانفیگ آپدیت‌شده‌اش را از همان بخش ببینی.")
     )

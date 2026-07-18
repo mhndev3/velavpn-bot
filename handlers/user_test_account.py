@@ -16,7 +16,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 
 from database.db import get_setting, save_user
 from handlers.btn_filter import Btn
-from services.ui_texts import T
+from services.ui_texts import T, TF
 
 router = Router()
 
@@ -112,7 +112,7 @@ async def test_get_cb(cb: CallbackQuery):
         return await cb.answer(T("test_disabled_short", "غیرفعال است"), show_alert=True)
     tests = cfg.get("tests", [])
     if not (0 <= idx < len(tests)):
-        return await cb.answer("یافت نشد", show_alert=True)
+        return await cb.answer(T("test_notfound", "یافت نشد"), show_alert=True)
 
     # ضدسوءاستفاده: هر کاربر فقط یک بار اکانت تست می‌گیرد
     if has_received_test_account(cb.from_user.id):
@@ -146,11 +146,15 @@ async def test_get_cb(cb: CallbackQuery):
     caption = (
         T("test_ready_title", "✅ اکانت تست شما آماده است") + "\n"
         "━━━━━━━━━━━━━━\n\n"
-        "📥 حجم: " + str(result.get("traffic_mb", 0)) + " مگابایت\n"
-        "⏳ اعتبار: " + str(result.get("duration_hours", 0)) + " ساعت\n"
-        "📅 انقضا: " + str(result.get("expires_at", "—")) + "\n"
-        "🌍 لوکیشن: " + str(result.get("server_label", "—")) + "\n\n"
-        "🔗 لینک کانفیگ:\n<code>" + link + "</code>"
+        + TF("test_ready_body",
+             "📥 حجم: {mb} مگابایت\n"
+             "⏳ اعتبار: {hours} ساعت\n"
+             "📅 انقضا: {expires}\n"
+             "🌍 لوکیشن: {loc}\n\n"
+             "🔗 لینک کانفیگ:\n<code>{link}</code>",
+             mb=str(result.get("traffic_mb", 0)), hours=str(result.get("duration_hours", 0)),
+             expires=str(result.get("expires_at", "—")), loc=str(result.get("server_label", "—")),
+             link=link)
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[[_btn(T("test_btn_back", "⬅️ بازگشت"), "u:menu")]])
     try:
