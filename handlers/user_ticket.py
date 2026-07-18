@@ -4,6 +4,7 @@ from aiogram.fsm.context import FSMContext
 
 from config.settings import ADMIN_REPORT_CHANNEL_ID, ADMIN_IDS
 from handlers.btn_filter import Btn
+from services.ui_texts import T, TF
 
 
 async def notify_admins(bot, text: str, **kwargs):
@@ -89,7 +90,8 @@ async def support_handler(message: Message, state: FSMContext):
     await send_content_page(
         message=message,
         key="support",
-        fallback_text=(
+        fallback_text=T(
+            "tk_support_intro",
             "🛟 پشتیبانی سریع WGV\n"
             "━━━━━━━━━━━━━━\n\n"
             "برای پیگیری خرید، مشکل اتصال، تمدید یا راهنمای نصب همینجا تیکت ثبت کنید.\n"
@@ -99,9 +101,9 @@ async def support_handler(message: Message, state: FSMContext):
 
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     await message.answer(
-        "موضوع تیکت را کوتاه و واضح ارسال کنید؛ مثلاً: مشکل اتصال V2Ray یا پیگیری سفارش.",
+        T("tk_ask_subject", "موضوع تیکت را کوتاه و واضح ارسال کنید؛ مثلاً: مشکل اتصال V2Ray یا پیگیری سفارش."),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="u:menu")]
+            [InlineKeyboardButton(text=T("tk_btn_back", "⬅️ بازگشت"), callback_data="u:menu")]
         ]),
     )
 
@@ -114,15 +116,16 @@ async def ticket_subject_handler(message: Message, state: FSMContext):
 
     if len(subject) < 2:
         await message.answer(
-            "موضوع تیکت خیلی کوتاهه. یه عنوان درست بفرست."
+            T("tk_subject_short", "موضوع تیکت خیلی کوتاهه. یه عنوان درست بفرست.")
         )
         return
 
     await state.update_data(subject=subject)
 
     await message.answer(
-        "متن پیام خود را ارسال کنید.\n\n"
-        "می‌توانید متن، عکس، ویدیو یا فایل بفرستید."
+        T("tk_ask_message",
+          "متن پیام خود را ارسال کنید.\n\n"
+          "می‌توانید متن، عکس، ویدیو یا فایل بفرستید.")
     )
 
     await state.set_state(TicketStates.waiting_for_message)
@@ -165,9 +168,11 @@ async def ticket_message_handler(message: Message, state: FSMContext):
     )
 
     await message.answer(
-        "✅ تیکت شما ثبت شد.\n\n"
-        f"شماره تیکت: <code>{ticket_id}</code>\n"
-        "پشتیبانی به‌زودی پاسخ می‌دهد."
+        TF("tk_saved",
+           "✅ تیکت شما ثبت شد.\n\n"
+           "شماره تیکت: <code>{ticket_id}</code>\n"
+           "پشتیبانی به‌زودی پاسخ می‌دهد.",
+           ticket_id=ticket_id)
     )
 
     await send_ticket_to_admin(

@@ -245,17 +245,20 @@ def main_menu_inline_for(telegram_id: int):
 def main_menu_keyboard():
     """منوی ساده fallback"""
     keyboard = [
-        [KeyboardButton(text="⚡ خرید کانفیگ")],
-        [KeyboardButton(text="💳 کیف پول"), KeyboardButton(text="📦 اشتراک‌های من")],
-        [KeyboardButton(text="🛟 پشتیبانی"), KeyboardButton(text="❓ سوالات متداول")],
-        [KeyboardButton(text="🤝 درخواست همکاری"), KeyboardButton(text="🎁 دعوت دوستان")],
+        [KeyboardButton(text=_get("btn_buy", "⚡ خرید کانفیگ"))],
+        [KeyboardButton(text=_get("btn_wallet", "💳 کیف پول")),
+         KeyboardButton(text=_get("btn_subs", "📦 اشتراک‌های من"))],
+        [KeyboardButton(text=_get("btn_support", "🛟 پشتیبانی")),
+         KeyboardButton(text=_get("btn_faq", "❓ سوالات متداول"))],
+        [KeyboardButton(text=_get("btn_coop", "🤝 درخواست همکاری")),
+         KeyboardButton(text=_get("btn_referral", "🎁 دعوت دوستان"))],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 
 def profile_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⚡ خرید کانفیگ جدید", callback_data="shop_back:categories")],
+        [InlineKeyboardButton(text=_get("btn_buy_new", "⚡ خرید کانفیگ جدید"), callback_data="shop_back:categories")],
     ])
 
 
@@ -274,16 +277,16 @@ def faq_questions_keyboard(faq_items: list):
 
 def cancel_keyboard():
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="❌ لغو عملیات")]],
+        keyboard=[[KeyboardButton(text=_get("btn_cancel_op", "❌ لغو عملیات"))]],
         resize_keyboard=True, one_time_keyboard=True
     )
 
 
 def discount_decision_keyboard(plan_id: int):
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎟 دارم کد تخفیف", callback_data="user_discount:have:" + str(plan_id))],
-        [InlineKeyboardButton(text="⏭️ ادامه بدون کد", callback_data="user_discount:none:" + str(plan_id))],
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="shop_back:categories")],
+        [InlineKeyboardButton(text=_get("disc_btn_have", "🎟 دارم کد تخفیف"), callback_data="user_discount:have:" + str(plan_id))],
+        [InlineKeyboardButton(text=_get("disc_btn_none", "⏭️ ادامه بدون کد"), callback_data="user_discount:none:" + str(plan_id))],
+        [InlineKeyboardButton(text=_get("shop_btn_back", "⬅️ بازگشت"), callback_data="shop_back:categories")],
     ])
 
 

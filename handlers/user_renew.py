@@ -14,7 +14,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 
 from database.db import get_connection, get_setting
 from handlers.btn_filter import Btn
-from services.ui_texts import T
+from services.ui_texts import T, TF
 
 router = Router()
 
@@ -30,9 +30,9 @@ def _fa(s):
 def _dur_label(days):
     d = int(days or 0)
     if d <= 0:
-        return "بی‌انقضا"
+        return T("u_no_expiry", "بی‌انقضا")
     months = round(d / 30) or 1
-    return "\u200f" + str(months) + " ماهه"
+    return "\u200f" + str(months) + T("u_month_suffix", " ماهه")
 
 
 # ─── اکانت‌های قابل تمدیدِ کاربر ─────────────────────────────
@@ -55,7 +55,7 @@ def _renewable_accounts(telegram_id: int):
 
 
 def _display_name(acc: dict) -> str:
-    return (acc.get("config_name") or acc.get("email") or "کانفیگ").strip()
+    return (acc.get("config_name") or acc.get("email") or T("rnw_config_fallback", "کانفیگ")).strip()
 
 
 def _accounts_kb(telegram_id: int):
@@ -105,9 +105,9 @@ def _plans_kb(order_id: int, server_id: int, days: int):
     for p in _plans_for_server(server_id):
         if int(p.get("duration_days") or 0) != int(days):
             continue
-        gb = (_fa(p["traffic_gb"]) + " گیگ") if p.get("traffic_gb") else "نامحدود"
+        gb = (_fa(p["traffic_gb"]) + T("u_gig", " گیگ")) if p.get("traffic_gb") else T("u_unlimited", "نامحدود")
         price = _fa("{:,}".format(p["price_toman"]))
-        rows.append([_btn("\u200f" + box + " " + gb + " | " + price + " تومان",
+        rows.append([_btn("\u200f" + box + " " + gb + " | " + price + T("u_toman", " تومان"),
                           "rnw:plan:" + str(order_id) + ":" + str(p["id"]))])
     rows.append([_btn(T("rnw_btn_back", "⬅️ بازگشت"),
                      "rnw:acc:" + str(order_id))])
@@ -164,7 +164,7 @@ async def renew_pick_account(cb: CallbackQuery):
     order_id = int(cb.data.split(":")[2])
     acc = _get_account(cb.from_user.id, order_id)
     if not acc:
-        return await cb.answer("اکانت پیدا نشد", show_alert=True)
+        return await cb.answer(T("rn_acc_notfound", "اکانت پیدا نشد"), show_alert=True)
     server_id = acc.get("server_id") or 0
     plans = _plans_for_server(server_id)
     if not plans:
@@ -188,7 +188,7 @@ async def renew_pick_duration(cb: CallbackQuery):
     order_id, days = int(parts[2]), int(parts[3])
     acc = _get_account(cb.from_user.id, order_id)
     if not acc:
-        return await cb.answer("اکانت پیدا نشد", show_alert=True)
+        return await cb.answer(T("rn_acc_notfound", "اکانت پیدا نشد"), show_alert=True)
     server_id = acc.get("server_id") or 0
     name = _display_name(acc)
     text = (T("rnw_title", "♻️ تمدید اشتراک") + "\n"
@@ -235,7 +235,7 @@ async def renew_pick_plan(cb: CallbackQuery):
     order_id, plan_id = int(parts[2]), int(parts[3])
     acc = _get_account(cb.from_user.id, order_id)
     if not acc:
-        return await cb.answer("اکانت پیدا نشد", show_alert=True)
+        return await cb.answer(T("rn_acc_notfound", "اکانت پیدا نشد"), show_alert=True)
 
     # پلن
     conn = get_connection()
@@ -244,13 +244,13 @@ async def renew_pick_plan(cb: CallbackQuery):
     row = cur.fetchone()
     conn.close()
     if not row:
-        return await cb.answer("این پلن دیگر موجود نیست.", show_alert=True)
+        return await cb.answer(T("shop_plan_gone", "این پلن دیگر موجود نیست."), show_alert=True)
     plan = dict(row)
 
     new_order_id = _create_renew_order(cb.from_user.id, plan, acc)
 
     name = _display_name(acc)
-    gb = (str(plan["traffic_gb"]) + " گیگ") if plan.get("traffic_gb") else "نامحدود"
+    gb = (str(plan["traffic_gb"]) + T("u_gig", " گیگ")) if plan.get("traffic_gb") else T("u_unlimited", "نامحدود")
     text = (
         T("rnw_invoice_title", "🧾 فاکتور تمدید") + "\n"
         "━━━━━━━━━━━━━━\n\n"
@@ -343,7 +343,7 @@ async def fulfill_renewal(bot, order: dict) -> dict | None:
 
     # اطلاع به کاربر
     try:
-        gb_txt = (str(result.get("new_total_gb")) + " گیگ") if result.get("new_total_gb") else "نامحدود"
+        gb_txt = (str(result.get("new_total_gb")) + T("u_gig", " گیگ")) if result.get("new_total_gb") else T("u_unlimited", "نامحدود")
         msg = (
             T("rnw_done_title", "✅ تمدید انجام شد") + "\n"
             "━━━━━━━━━━━━━━\n\n"
