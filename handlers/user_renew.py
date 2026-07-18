@@ -254,9 +254,11 @@ async def renew_pick_plan(cb: CallbackQuery):
     text = (
         T("rnw_invoice_title", "🧾 فاکتور تمدید") + "\n"
         "━━━━━━━━━━━━━━\n\n"
-        "🏷 کانفیگ: " + name + "\n"
-        "📥 حجم افزوده: " + gb + "\n"
-        "⏳ مدت افزوده: " + _dur_label(plan["duration_days"]) + "\n"
+        + TF("rnw_invoice_body",
+             "🏷 کانفیگ: {name}\n"
+             "📥 حجم افزوده: {gb}\n"
+             "⏳ مدت افزوده: {dur}\n",
+             name=name, gb=gb, dur=_dur_label(plan["duration_days"]))
         + payment_price_block(plan["price_toman"]) + "\n\n"
         + T("rnw_invoice_hint", "حجم و مدت پس از پرداخت، به اکانت فعلی شما اضافه می‌شود.\nروش پرداخت را انتخاب کنید:")
     )
@@ -347,9 +349,12 @@ async def fulfill_renewal(bot, order: dict) -> dict | None:
         msg = (
             T("rnw_done_title", "✅ تمدید انجام شد") + "\n"
             "━━━━━━━━━━━━━━\n\n"
-            "🏷 کانفیگ: " + (order.get("config_name") or email) + "\n"
-            "📥 حجم کل جدید: " + gb_txt + "\n"
-            "📅 انقضای جدید: " + str(result.get("new_expiry", "—")) + "\n\n"
+            + TF("rnw_done_body",
+                 "🏷 کانفیگ: {name}\n"
+                 "📥 حجم کل جدید: {gb}\n"
+                 "📅 انقضای جدید: {expiry}\n\n",
+                 name=(order.get("config_name") or email),
+                 gb=gb_txt, expiry=str(result.get("new_expiry", "—")))
             + T("rnw_done_hint", "لینک کانفیگ شما تغییری نکرده و همان قبلی است. ✅")
         )
         await bot.send_message(chat_id=order["telegram_id"], text=msg)
