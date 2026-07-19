@@ -159,6 +159,8 @@ async def track_purchase_handler(message: Message):
             status_fa = T("track_st_approved", "تایید شده")
         elif status == "rejected":
             status_fa = T("track_st_rejected", "رد شده")
+        elif status == "imported":
+            status_fa = T("track_st_imported", "افزوده‌شده به اشتراک‌ها")
         else:
             status_fa = status
 
