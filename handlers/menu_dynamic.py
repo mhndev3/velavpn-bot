@@ -5,6 +5,7 @@ from aiogram import Router, F
 from aiogram.types import Message
 from config.settings import ADMIN_IDS
 from database.db import get_sub_admin
+from services.ui_texts import T
 from handlers.btn_filter import Btn
 
 router = Router()
@@ -31,4 +32,4 @@ async def sa_stats_btn(msg: Message):
     if not sa:
         return
     from handlers.sub_admin_panel import sub_admin_main_kb
-    await msg.answer("👤 پنل ساب‌ادمین", reply_markup=sub_admin_main_kb())
+    await msg.answer(T("sa_home_title", "👤 پنل ساب‌ادمین"), reply_markup=sub_admin_main_kb())

@@ -9,6 +9,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 
 from database.db import get_setting, is_head_admin
+from services.ui_texts import T
 from keyboards.user_keyboards import (
     main_menu_keyboard_for, main_menu_inline_for, glass_launcher_kb, is_glass_mode,
 )
@@ -76,7 +77,7 @@ async def glass_dispatch(cb: CallbackQuery, state: FSMContext):
     try:
         fn = getattr(importlib.import_module(module), func)
     except Exception:
-        return await cb.answer("این بخش در دسترس نیست.", show_alert=True)
+        return await cb.answer(T("glass_section_unavailable", "این بخش در دسترس نیست."), show_alert=True)
     await cb.answer()
     shim = _Shim(cb)
     try:
@@ -86,7 +87,7 @@ async def glass_dispatch(cb: CallbackQuery, state: FSMContext):
             await fn(shim)
     except Exception:
         try:
-            await cb.message.answer("⚠️ خطا در باز کردن این بخش. لطفاً /start را بزنید.")
+            await cb.message.answer(T("glass_section_error", "⚠️ خطا در باز کردن این بخش. لطفاً /start را بزنید."))
         except Exception:
             pass
 

@@ -183,7 +183,7 @@ async def onb_contact(msg: Message, state: FSMContext):
 async def onb_username(msg: Message, state: FSMContext):
     uname = (msg.text or "").strip()
     if not uname or len(uname) > 32:
-        return await msg.answer("❌ نام کاربری نامعتبر است. یک نام کوتاه‌تر بفرست.")
+        return await msg.answer(T("onb_username_invalid", "❌ نام کاربری نامعتبر است. یک نام کوتاه‌تر بفرست."))
     set_user_field(msg.from_user.id, "custom_username", uname)
     await _finish_and_menu(msg, msg.from_user.id, state, user=msg.from_user)
 
