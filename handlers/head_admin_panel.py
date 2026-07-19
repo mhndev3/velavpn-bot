@@ -72,18 +72,52 @@ def _btn(text, data):
 
 def head_admin_main_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [_btn("📊 آمار کلی", "ha:stats"),         _btn("👥 کاربران", "ha:users")],
-        [_btn("🧾 سفارش‌ها", "ha:orders"),        _btn("⏳ پرداخت انتظار", "ha:pending")],
-        [_btn("💳 کیف‌پول", "ha:wallet_charges"),  _btn("🖥 سرورهای X-UI", "ha:servers")],
-        [_btn("👤 ساب‌ادمین‌ها", "ha:subadmins"),  _btn("📊 تعرفه ساب‌ادمین", "ha:pricing")],
-        [_btn("🎨 تنظیمات UI", "ui:home"),         _btn("📈 آنالیتیکس", "admin:analytics")],
-        [_btn("➕ افزودن پلن", "ha:add_plan"),     _btn("⚙️ تنظیمات بات", "ha:settings")],
-        [_btn("👑 مدیریت هد‌ادمین‌ها", "ha:hadmins")],
-        [_btn("📢 کانال‌های اجباری", "ha:channels")],
-        [_btn("📲 مدیریت برنامه‌ها", "ha:apps")],
-        [_btn("🎁 تنظیمات اکانت تست", "ha:test")],
-        [_btn("🎟 مدیریت کد تخفیف", "admin:discounts")],
+        [_btn("📊 فروش و مشتریان", "ha:grp:sales")],
+        [_btn("🛒 محصولات و قیمت‌گذاری", "ha:grp:products")],
+        [_btn("🖥 زیرساخت و کانال‌ها", "ha:grp:infra")],
+        [_btn("👥 دسترسی‌ها و ادمین‌ها", "ha:grp:access")],
+        [_btn("🎨 شخصی‌سازی و تنظیمات", "ha:grp:system")],
     ])
+
+
+# ─── زیرمنوهای گروه‌بندی‌شدهٔ پنل هد‌ادمین ───────────────────
+HA_GROUPS = {
+    "sales": ("📊 فروش و مشتریان", [
+        [("📊 آمار کلی", "ha:stats"), ("📈 آنالیتیکس", "admin:analytics")],
+        [("👥 کاربران", "ha:users"), ("🧾 سفارش‌ها", "ha:orders")],
+        [("⏳ پرداخت‌های در انتظار", "ha:pending")],
+        [("💳 شارژهای کیف‌پول", "ha:wallet_charges")],
+    ]),
+    "products": ("🛒 محصولات و قیمت‌گذاری", [
+        [("➕ افزودن پلن", "ha:add_plan")],
+        [("📊 تعرفهٔ ساب‌ادمین", "ha:pricing")],
+        [("🎟 مدیریت کد تخفیف", "admin:discounts")],
+        [("🎁 تنظیمات اکانت تست", "ha:test")],
+    ]),
+    "infra": ("🖥 زیرساخت و کانال‌ها", [
+        [("🖥 سرورهای X-UI", "ha:servers")],
+        [("📢 کانال‌های اجباری", "ha:channels")],
+        [("📲 مدیریت برنامه‌ها", "ha:apps")],
+    ]),
+    "access": ("👥 دسترسی‌ها و ادمین‌ها", [
+        [("👤 ساب‌ادمین‌ها", "ha:subadmins")],
+        [("👑 مدیریت هد‌ادمین‌ها", "ha:hadmins")],
+    ]),
+    "system": ("🎨 شخصی‌سازی و تنظیمات", [
+        [("🎨 تنظیمات ظاهر و متن‌ها", "ui:home")],
+        [("⚙️ تنظیمات بات", "ha:settings")],
+    ]),
+}
+
+
+def ha_group_kb(gkey: str):
+    group = HA_GROUPS.get(gkey)
+    rows = []
+    if group:
+        for row in group[1]:
+            rows.append([_btn(text, data) for text, data in row])
+    rows.append([_btn("⬅️ بازگشت", "ha:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def back_kb(data="ha:home"):
@@ -414,7 +448,29 @@ async def head_admin_entry(message: Message):
 async def ha_home(cb: CallbackQuery):
     if not is_admin(cb.from_user.id):
         return await cb.answer("دسترسی ندارید", show_alert=True)
-    await cb.message.edit_text("👑 پنل هد ادمین", reply_markup=head_admin_main_kb())
+    await cb.message.edit_text(
+        "👑 <b>پنل هد ادمین</b>\n"
+        "━━━━━━━━━━━━━━\n\n"
+        "یک بخش را انتخاب کنید:",
+        reply_markup=head_admin_main_kb()
+    )
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("ha:grp:"))
+async def ha_group(cb: CallbackQuery):
+    if not is_admin(cb.from_user.id):
+        return await cb.answer("دسترسی ندارید", show_alert=True)
+    gkey = cb.data.split(":")[2]
+    group = HA_GROUPS.get(gkey)
+    if not group:
+        return await cb.answer("بخش پیدا نشد", show_alert=True)
+    await cb.message.edit_text(
+        f"{group[0]}\n"
+        "━━━━━━━━━━━━━━\n\n"
+        "یک گزینه را انتخاب کنید:",
+        reply_markup=ha_group_kb(gkey)
+    )
     await cb.answer()
 
 

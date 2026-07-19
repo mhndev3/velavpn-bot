@@ -567,14 +567,47 @@ def is_hidden(key: str) -> bool:
     return get_setting(f"hide_{key}", "") == "1"
 
 
+# ─── گروه‌بندی دومرحله‌ای دسته‌ها (سطح ۱: گروه → سطح ۲: دسته) ───
+# فقط ناوبری را مرتب می‌کند؛ SETTINGS_TREE و کلیدها دست‌نخورده می‌مانند.
+SETTINGS_GROUPS = [
+    ("appearance", "🎨 ظاهر، دکمه‌ها و برندینگ",
+     ["buttons", "texts", "banners", "emojis", "welcome"]),
+    ("onboarding_grp", "🚪 ورود، ثبت‌نام و راهنما",
+     ["onboarding", "guide"]),
+    ("shopping", "🛒 خرید، پرداخت و تخفیف",
+     ["shop", "buy", "payment", "discount", "gbpricing", "pricing", "keyboards"]),
+    ("services", "📦 سرویس‌ها و اشتراک‌ها",
+     ["subs", "renew", "cfgupdate", "addcfg", "test", "apps"]),
+    ("account_grp", "👤 حساب، کیف‌پول و پشتیبانی",
+     ["account", "profile", "wallet", "tracking", "faq", "referral", "coop", "ticket"]),
+    ("system", "⚙️ ساب‌ادمین، واحدها و سیستم",
+     ["subadmin", "units", "navigation"]),
+]
+
+
 def ui_home_kb():
-    rows = [[_btn(cat["label"], f"ui:cat:{k}")] for k, cat in SETTINGS_TREE.items()]
-    rows.append([_btn("🎨 رنگ دکمه‌ها", "ui:colors")])
-    rows.append([_btn("↕️ چیدمان دکمه‌ها", "ui:order")])
+    """سطح ۱: گروه‌های اصلی + ابزارهای سراسری."""
+    rows = [[_btn(label, f"ui:group:{gkey}")] for gkey, label, _ in SETTINGS_GROUPS]
+    rows.append([_btn("🎨 رنگ دکمه‌ها", "ui:colors"),
+                 _btn("↕️ چیدمان دکمه‌ها", "ui:order")])
     rows.append([_btn("🙈 پنهان کردن دکمه‌ها", "ui:hide_menu")])
-    rows.append([_btn("💾 دانلود دیتابیس", "ui:download_db")])
-    rows.append([_btn("🔄 بازنشانی همه", "ui:reset_all")])
+    rows.append([_btn("💾 دانلود دیتابیس", "ui:download_db"),
+                 _btn("🔄 بازنشانی همه", "ui:reset_all")])
     rows.append([_btn("⬅️ بازگشت", "ha:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def ui_group_kb(gkey: str):
+    """سطح ۲: دسته‌های داخل یک گروه."""
+    group = next((g for g in SETTINGS_GROUPS if g[0] == gkey), None)
+    rows = []
+    if group:
+        for cat_key in group[2]:
+            cat = SETTINGS_TREE.get(cat_key)
+            if cat:
+                n = len(cat["items"])
+                rows.append([_btn(f"{cat['label']}  ({n})", f"ui:cat:{cat_key}")])
+    rows.append([_btn("⬅️ بازگشت به گروه‌ها", "ui:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -629,7 +662,10 @@ def ui_cat_kb(cat_key: str):
         cur = get_setting(key, default)
         short = cur[:25] + "…" if len(cur) > 25 else cur
         rows.append([_btn(f"{label}: {short}", f"ui:edit:{cat_key}:{key}")])
-    rows.append([_btn("⬅️ بازگشت", "ui:home")])
+    # بازگشت به گروه والد (اگر دسته در گروهی باشد)، وگرنه به خانه
+    parent = next((g[0] for g in SETTINGS_GROUPS if cat_key in g[2]), None)
+    back_data = f"ui:group:{parent}" if parent else "ui:home"
+    rows.append([_btn("⬅️ بازگشت", back_data)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -651,8 +687,28 @@ async def ui_home_cb(cb: CallbackQuery):
     if cb.from_user.id not in ADMIN_IDS:
         return await cb.answer("دسترسی ندارید", show_alert=True)
     await cb.message.edit_text(
-        "🎨 تنظیمات UI/UX\n\nمتن‌ها، بنرها، دکمه‌ها و ایموجی‌ها:",
+        "🎨 <b>تنظیمات ظاهر و متن‌ها</b>\n"
+        "━━━━━━━━━━━━━━\n\n"
+        "همهٔ متن‌ها، دکمه‌ها، بنرها و ایموجی‌های ربات از اینجا قابل ویرایش‌اند.\n"
+        "یک گروه را انتخاب کنید:",
         reply_markup=ui_home_kb()
+    )
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("ui:group:"))
+async def ui_group_cb(cb: CallbackQuery):
+    if cb.from_user.id not in ADMIN_IDS:
+        return await cb.answer("دسترسی ندارید", show_alert=True)
+    gkey = cb.data.split(":")[2]
+    group = next((g for g in SETTINGS_GROUPS if g[0] == gkey), None)
+    if not group:
+        return await cb.answer("گروه پیدا نشد", show_alert=True)
+    await cb.message.edit_text(
+        f"{group[1]}\n"
+        "━━━━━━━━━━━━━━\n\n"
+        "یک بخش را برای ویرایش انتخاب کنید:",
+        reply_markup=ui_group_kb(gkey)
     )
     await cb.answer()
 
