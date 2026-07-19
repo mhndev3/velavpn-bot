@@ -13,6 +13,7 @@ from keyboards.user_keyboards import (
 from states.user_states import UserDiscountStates
 from services.ui_service import send_screen
 from services.price_service import payment_price_block
+from services.ui_texts import T
 
 
 router = Router()
