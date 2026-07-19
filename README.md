@@ -4,7 +4,7 @@
 
 <br/>
 
-<img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" />
+<img src="https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white" />
 <img src="https://img.shields.io/badge/aiogram-3.29-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" />
 <img src="https://img.shields.io/badge/SQLite-WAL-003B57?style=for-the-badge&logo=sqlite&logoColor=white" />
 <img src="https://img.shields.io/badge/3x--ui-panel-FF6B35?style=for-the-badge" />
@@ -36,6 +36,7 @@
 ### 🛒 For Customers
 - **Hierarchical buy flow** — location → duration → volume
 - **Custom config naming** — pick your own service name
+- **Discount codes** — percent or fixed-toman, applied before payment
 - **One-message delivery** — QR image + link + full details
 - **Live usage stats** — remaining GB, % used, days left
 - **Import existing configs** — paste any `vless/vmess/trojan/ss` link
@@ -46,7 +47,9 @@
 
 ### 👑 For Admins
 - **Three-tier roles** — user / sub-admin / head-admin
-- **Full UI customization** — every text, emoji, banner & button
+- **Fully editable copy** — every user & sub-admin text, emoji & banner, live from the panel
+- **Grouped two-level menus** — settings & head-admin panel organized into logical sections
+- **Discount manager** — create, edit, toggle & delete codes
 - **Drag-free menu layout** — reorder buttons & rows from the panel
 - **Premium (animated) emoji** support in messages
 - **Forced channel join** — add/remove channels live
@@ -221,13 +224,17 @@ Schema migrations run automatically on boot, so a plain restart is enough.
 
 ## 🎛 Admin Panel Tour
 
+The head-admin panel is organized into **five grouped submenus**, and the UI-settings screen groups **all editable copy into six sections** — no more endless flat lists.
+
 | Section | What you can change |
 |---|---|
-| 🎨 **UI Settings** | Every user-facing text, emoji, banner and button label — live, no restart |
+| 🎨 **UI Settings** (6 groups) | Every user & sub-admin text, emoji, banner and button label — live, no restart |
 | ↕️ **Menu Layout** | Reorder buttons, move left/right, merge & split rows — applied instantly |
+| 🎟 **Discount Codes** | Create, edit, toggle & delete percent or fixed-toman codes |
 | 🖥 **Servers** | Add 3x-ui panels, test connections, list inbounds, override domain |
 | 📦 **Plans** | Create & **edit** plans: price, volume, duration, location |
 | 📢 **Channels** | Forced-join channels (add via `@username`, link, or forward) |
+| 👤 **Sub-Admins** | Grant reseller access, set custom pricing & commission |
 | 👑 **Head Admins** | Grant/revoke full panel access by numeric ID |
 | 🗄 **Backups** | One-tap full backup (bot + all panels) delivered in Telegram |
 | ⚙️ **Bot Settings** | Card number, referral %, glass-button mode, DB download |
@@ -244,6 +251,9 @@ Schema migrations run automatically on boot, so a plain restart is enough.
 - [x] Live usage stats & percentage bars
 - [x] In-panel menu layout editor (reorder / merge / split)
 - [x] Automated X-UI panel database backups
+- [x] Discount code system (percent / fixed-toman)
+- [x] Fully editable user & sub-admin copy from the panel
+- [x] Two-level grouped navigation for settings & head-admin menu
 - [ ] **Telegram Mini App** — fully styled UI with real button colors
 - [ ] Cross-platform client (Flutter + Xray-core)
 - [ ] Advanced analytics dashboard
