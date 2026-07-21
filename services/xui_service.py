@@ -356,14 +356,41 @@ class XUIClient:
             pass
         return False
 
+    async def reset_client_traffic(self, ib_id: int, email: str) -> bool:
+        """
+        ریست ترافیک مصرف‌شدهٔ کلاینت (up/down → صفر) از طریق endpoint استاندارد 3x-ui.
+        این جدا از settings است؛ مصرف در clientStats نگه‌داری می‌شود.
+        """
+        s = await self._sess()
+        await self._refresh_csrf()
+        for ep in [
+            f"/panel/api/inbounds/{int(ib_id)}/resetClientTraffic/{email}",
+            f"/panel/inbound/{int(ib_id)}/resetClientTraffic/{email}",
+        ]:
+            try:
+                r = await s.post(f"{self.base_url}{ep}", headers=self._h_json())
+                if r.status == 200:
+                    d = await r.json()
+                    if d.get("success"):
+                        return True
+            except Exception:
+                continue
+        return False
+
     async def renew_client(self, email: str, add_traffic_gb: int, add_days: int):
         """
-        تمدید کلاینت موجود: حجم و زمانِ جدید را به مقادیر فعلی «اضافه» می‌کند.
+        تمدید کلاینت موجود — منطق «ریست و جایگزینی» (طبق خواستهٔ کارفرما):
 
-        قواعد (طبق خواستهٔ کارفرما):
-        - حجم جدید = حجم کل فعلی + حجم خریداری‌شده (اگر نامحدود بود، نامحدود می‌ماند).
-        - زمان: اگر هنوز اعتبار دارد → به تاریخ انقضای فعلی اضافه می‌شود؛
-          اگر منقضی شده یا انقضا ندارد → از «حالا» + مدت جدید.
+        - ترافیک مصرف‌شده همیشه ریست می‌شود (مصرف → صفر).
+        - حجم کل روی مقدار پلنِ انتخابی «تنظیم» می‌شود (نه اضافه).
+          اگر پلن نامحدود باشد (۰)، نامحدود می‌ماند.
+        - مدت از «حالا» به‌اندازهٔ مدت پلن تنظیم می‌شود (نه اضافه به تاریخ قبلی).
+          یعنی اگر ۱۵ روز مانده بود و پلن ۳۰ روزه بود، دوباره ۳۰ روز کامل از حالا.
+        - اکانت همیشه فعال می‌شود (اگر غیرفعال بود، فعال می‌شود).
+
+        مثال‌ها:
+        - همان پلن ۱ ماهه ۱۰ گیگ (۱۵ روز مانده): مصرف صفر، حجم ۱۰ گیگ، ۳۰ روز از حالا.
+        - پلن جدید ۳ ماهه ۲۰ گیگ: مصرف صفر، حجم ۲۰ گیگ، ۹۰ روز از حالا.
         """
         ib_id, client, st = await self._find_client_raw(email)
         if not client or ib_id is None:
@@ -371,31 +398,35 @@ class XUIClient:
 
         now_ms = int(datetime.now().timestamp() * 1000)
 
-        cur_total = int(client.get("totalGB", 0) or 0)
-        add_bytes = int(add_traffic_gb) * 1024 ** 3 if add_traffic_gb else 0
-        new_total = 0 if cur_total <= 0 else cur_total + add_bytes
-
         cur_exp = int(client.get("expiryTime", 0) or 0)
         was_expired = bool(cur_exp) and cur_exp <= now_ms
+
+        # حجم جدید = مقدار پلن (تنظیم، نه اضافه)؛ ۰ یا خالی → نامحدود
+        new_total = int(add_traffic_gb) * 1024 ** 3 if add_traffic_gb else 0
+
+        # مدت جدید = از حالا + مدت پلن (جایگزینی کامل، نه اضافه به تاریخ قبلی)
         add_ms = int(add_days) * 24 * 3600 * 1000 if add_days else 0
-        if add_ms == 0:
-            new_exp = cur_exp
-        elif cur_exp and cur_exp > now_ms:
-            new_exp = cur_exp + add_ms
-        else:
-            new_exp = now_ms + add_ms
+        new_exp = (now_ms + add_ms) if add_ms else 0  # ۰ = بی‌انقضا
 
         def _mut(cl):
             cl["totalGB"] = new_total
             cl["expiryTime"] = new_exp
             cl["enable"] = True
+            # فیلدهای شمارندهٔ داخلی برخی نسخه‌ها هم صفر شوند (بی‌ضرر اگر نباشند)
+            cl["up"] = 0
+            cl["down"] = 0
 
         ok = await self._apply_client_update(ib_id, email, _mut)
         if not ok:
             return None
+
+        # ریست واقعی ترافیک مصرف‌شده در پنل (up/down در clientStats)
+        traffic_reset = await self.reset_client_traffic(ib_id, email)
+
         return {
             "email": email,
             "was_expired": was_expired,
+            "traffic_reset": traffic_reset,
             "new_total_gb": (round(new_total / 1024 ** 3, 2) if new_total else 0),
             "new_expiry": (datetime.fromtimestamp(new_exp / 1000).strftime("%Y-%m-%d")
                            if new_exp else "نامحدود"),
@@ -708,10 +739,12 @@ async def delete_account(email: str, server_id: int):
         await c.close()
 
 
-async def renew_account(email: str, server_id: int, add_traffic_gb: int, add_days: int):
+async def renew_account(email: str, server_id: int, plan_traffic_gb: int, plan_days: int):
     """
-    تمدید اکانت موجود روی همان سرور: حجم و مدت را به مقادیر فعلی اضافه می‌کند.
-    خروجی: dict با new_total_gb / new_expiry، یا None اگر ناموفق بود.
+    تمدید اکانت موجود روی همان سرور — منطق «ریست و جایگزینی»:
+    ترافیک ریست می‌شود، حجم روی مقدار پلن تنظیم می‌شود، و مدت از حالا شروع می‌شود.
+    اگر اکانت غیرفعال بود، فعال می‌شود.
+    خروجی: dict با new_total_gb / new_expiry / traffic_reset، یا None اگر ناموفق بود.
     """
     server = get_server(server_id)
     if not server or not server.get("is_active", 1):
@@ -721,7 +754,7 @@ async def renew_account(email: str, server_id: int, add_traffic_gb: int, add_day
         ok, _ = await c.login()
         if not ok:
             return None
-        return await c.renew_client(email, add_traffic_gb, add_days)
+        return await c.renew_client(email, plan_traffic_gb, plan_days)
     finally:
         await c.close()
 

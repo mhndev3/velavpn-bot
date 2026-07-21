@@ -256,11 +256,12 @@ async def renew_pick_plan(cb: CallbackQuery):
         "━━━━━━━━━━━━━━\n\n"
         + TF("rnw_invoice_body",
              "🏷 کانفیگ: {name}\n"
-             "📥 حجم افزوده: {gb}\n"
-             "⏳ مدت افزوده: {dur}\n",
+             "📥 حجم: {gb}\n"
+             "⏳ مدت: {dur}\n"
+             "♻️ ترافیک ریست می‌شود\n",
              name=name, gb=gb, dur=_dur_label(plan["duration_days"]))
         + payment_price_block(plan["price_toman"]) + "\n\n"
-        + T("rnw_invoice_hint", "حجم و مدت پس از پرداخت، به اکانت فعلی شما اضافه می‌شود.\nروش پرداخت را انتخاب کنید:")
+        + T("rnw_invoice_hint", "پس از پرداخت، سرویس شما به این حجم و مدت بازنشانی می‌شود و ترافیک مصرف‌شده صفر می‌گردد.\nروش پرداخت را انتخاب کنید:")
     )
     try:
         await cb.message.edit_text(text, reply_markup=payment_methods_for_order_keyboard(new_order_id))
@@ -277,17 +278,24 @@ def order_is_renewal(order: dict) -> bool:
 
 async def fulfill_renewal(bot, order: dict) -> dict | None:
     """
-    اکانت مبدأ را با حجم و مدت جمع‌شده تمدید می‌کند و به کاربر اطلاع می‌دهد.
+    اکانت مبدأ را با منطق «ریست و جایگزینی» تمدید می‌کند و به کاربر اطلاع می‌دهد.
+
+    - ترافیک مصرف‌شده ریست می‌شود (مصرف → صفر).
+    - حجم روی مقدار پلنِ انتخابی تنظیم می‌شود (اگر همان پلن قبلی باشد، همان حجم؛
+      اگر پلن متفاوت باشد، حجم جدید).
+    - مدت از حالا به‌اندازهٔ مدت پلن تنظیم می‌شود (مثلاً ۱۵ روز مانده + تمدید ۱ ماهه
+      = ۳۰ روز کامل از حالا، نه ۴۵ روز).
+
     خروجی: dict نتیجه یا None اگر ناموفق بود.
     فقط زمانی صدا زده می‌شود که order_is_renewal(order) True باشد.
     """
     from services.xui_service import renew_account
     email = (order.get("renew_email") or "").strip()
     server_id = int(order.get("renew_server_id") or 0)
-    add_days = int(order.get("duration_days") or 0)
+    plan_days = int(order.get("duration_days") or 0)
 
-    # حجم افزوده از روی پلن سفارش
-    add_gb = 0
+    # حجم هدف از روی پلن سفارش (مقدار جایگزین، نه افزوده)
+    plan_gb = 0
     try:
         conn = get_connection()
         cur = conn.cursor()
@@ -295,11 +303,11 @@ async def fulfill_renewal(bot, order: dict) -> dict | None:
         r = cur.fetchone()
         conn.close()
         if r and r["traffic_gb"]:
-            add_gb = int(r["traffic_gb"])
+            plan_gb = int(r["traffic_gb"])
     except Exception:
         pass
 
-    result = await renew_account(email, server_id, add_gb, add_days)
+    result = await renew_account(email, server_id, plan_gb, plan_days)
     if not result:
         return None
 
@@ -324,20 +332,15 @@ async def fulfill_renewal(bot, order: dict) -> dict | None:
                 (str(new_exp), email, server_id),
             )
         # اشتراک مرتبط را هم به‌روز کن (بر اساس همان اکانت)
-        if was_expired:
-            # اکانت منقضی بوده و از «حالا» تمدید شده؛ created_at را هم به حالا
-            # ریست کن تا مدتِ نمایش‌داده‌شده = مقدار تمدیدشده باشد (نه فاصلهٔ قدیمی).
-            from datetime import datetime as _dt
-            now_str = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
-            cur.execute("""
-                UPDATE subscriptions SET expires_at = ?, created_at = ?
-                WHERE order_id IN (SELECT order_id FROM xui_accounts WHERE email = ? AND server_id = ?)
-            """, (str(new_exp), now_str, email, server_id))
-        else:
-            cur.execute("""
-                UPDATE subscriptions SET expires_at = ?
-                WHERE order_id IN (SELECT order_id FROM xui_accounts WHERE email = ? AND server_id = ?)
-            """, (str(new_exp), email, server_id))
+        # با منطق جدیدِ «ریست و جایگزینی»، مدت همیشه از حالا شروع می‌شود؛
+        # پس created_at را همیشه به حالا ریست می‌کنیم تا مدتِ نمایش‌داده‌شده
+        # در «اشتراک‌های من» دقیقاً برابر مدتِ پلنِ تمدیدشده باشد.
+        from datetime import datetime as _dt
+        now_str = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("""
+            UPDATE subscriptions SET expires_at = ?, created_at = ?
+            WHERE order_id IN (SELECT order_id FROM xui_accounts WHERE email = ? AND server_id = ?)
+        """, (str(new_exp), now_str, email, server_id))
         conn.commit()
         conn.close()
     except Exception:
@@ -352,6 +355,7 @@ async def fulfill_renewal(bot, order: dict) -> dict | None:
             + TF("rnw_done_body",
                  "🏷 کانفیگ: {name}\n"
                  "📥 حجم کل جدید: {gb}\n"
+                 "♻️ ترافیک مصرف‌شده ریست شد\n"
                  "📅 انقضای جدید: {expiry}\n\n",
                  name=(order.get("config_name") or email),
                  gb=gb_txt, expiry=str(result.get("new_expiry", "—")))
