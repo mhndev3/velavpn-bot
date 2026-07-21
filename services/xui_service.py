@@ -358,24 +358,78 @@ class XUIClient:
 
     async def reset_client_traffic(self, ib_id: int, email: str) -> bool:
         """
-        ریست ترافیک مصرف‌شدهٔ کلاینت (up/down → صفر) از طریق endpoint استاندارد 3x-ui.
-        این جدا از settings است؛ مصرف در clientStats نگه‌داری می‌شود.
+        ریست ترافیک مصرف‌شدهٔ کلاینت (up/down → صفر).
+
+        این پنل (v3.4.2) endpoint استانداردِ resetClientTraffic را ندارد و
+        clientStats از طریق آپدیت اینباند فقط-خواندنی است. بنابراین از روش
+        «حذف و بازسازیِ کلاینت با حفظ کامل مشخصات» استفاده می‌کنیم:
+        uuid/email/subId/password/totalGB/expiryTime همگی حفظ می‌شوند، پس
+        لینک کانفیگِ کاربر هیچ تغییری نمی‌کند؛ فقط شمارندهٔ مصرف صفر می‌شود.
+
+        اگر پنل روزی endpoint استاندارد داشته باشد، ابتدا آن امتحان می‌شود.
         """
         s = await self._sess()
         await self._refresh_csrf()
+
+        # ۱) تلاش با endpoint استاندارد (اگر پنل پشتیبانی کند)
         for ep in [
             f"/panel/api/inbounds/{int(ib_id)}/resetClientTraffic/{email}",
             f"/panel/inbound/{int(ib_id)}/resetClientTraffic/{email}",
         ]:
             try:
                 r = await s.post(f"{self.base_url}{ep}", headers=self._h_json())
-                if r.status == 200:
-                    d = await r.json()
-                    if d.get("success"):
-                        return True
+                if r.status == 200 and bool((await r.json()).get("success")):
+                    return True
             except Exception:
-                continue
-        return False
+                pass
+
+        # ۲) روش سازگار: حذف و بازسازی با حفظ کامل مشخصات
+        try:
+            import copy
+            inbounds = await self.get_inbounds()
+            ib = next((x for x in inbounds if int(x.get("id", 0)) == int(ib_id)), None)
+            if not ib:
+                return False
+            settings = self._parse(ib.get("settings", {}))
+            saved = next((cl for cl in settings.get("clients", [])
+                          if str(cl.get("email", "")).strip() == str(email).strip()), None)
+            if not saved:
+                return False
+            saved = copy.deepcopy(saved)
+
+            # مرحلهٔ حذف
+            settings["clients"] = [cl for cl in settings.get("clients", [])
+                                   if str(cl.get("email", "")).strip() != str(email).strip()]
+            payload = dict(ib)
+            payload["settings"] = json.dumps(settings)
+            for k in ["streamSettings", "sniffing", "allocate"]:
+                if k in payload and not isinstance(payload[k], str):
+                    payload[k] = json.dumps(payload[k])
+            payload.pop("clientStats", None)
+            r1 = await s.post(f"{self.base_url}/panel/api/inbounds/update/{int(ib_id)}",
+                              json=payload, headers=self._h_json())
+            if r1.status != 200 or not bool((await r1.json()).get("success")):
+                return False
+
+            # مرحلهٔ بازسازی با همان مشخصات
+            await self._refresh_csrf()
+            inbounds2 = await self.get_inbounds()
+            ib2 = next((x for x in inbounds2 if int(x.get("id", 0)) == int(ib_id)), None)
+            if not ib2:
+                return False
+            settings2 = self._parse(ib2.get("settings", {}))
+            settings2.setdefault("clients", []).append(saved)
+            payload2 = dict(ib2)
+            payload2["settings"] = json.dumps(settings2)
+            for k in ["streamSettings", "sniffing", "allocate"]:
+                if k in payload2 and not isinstance(payload2[k], str):
+                    payload2[k] = json.dumps(payload2[k])
+            payload2.pop("clientStats", None)
+            r2 = await s.post(f"{self.base_url}/panel/api/inbounds/update/{int(ib_id)}",
+                              json=payload2, headers=self._h_json())
+            return r2.status == 200 and bool((await r2.json()).get("success"))
+        except Exception:
+            return False
 
     async def renew_client(self, email: str, add_traffic_gb: int, add_days: int):
         """
