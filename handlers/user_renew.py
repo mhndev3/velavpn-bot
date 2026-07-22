@@ -296,16 +296,37 @@ async def fulfill_renewal(bot, order: dict) -> dict | None:
 
     # حجم هدف از روی پلن سفارش (مقدار جایگزین، نه افزوده)
     plan_gb = 0
+    plan_found = False
     try:
         conn = get_connection()
         cur = conn.cursor()
         cur.execute("SELECT traffic_gb FROM plans WHERE id = ?", (order.get("plan_id"),))
         r = cur.fetchone()
         conn.close()
-        if r and r["traffic_gb"]:
-            plan_gb = int(r["traffic_gb"])
+        if r:
+            plan_found = True
+            if r["traffic_gb"]:
+                plan_gb = int(r["traffic_gb"])
     except Exception:
         pass
+
+    # محافظ ایمنی: اگر پلن بین ثبت سفارش و تأیید حذف شده باشد، plan_gb صفر می‌ماند
+    # که در منطق «تنظیم» یعنی نامحدود. در این حالت حجم فعلی خودِ اکانت را نگه می‌داریم
+    # تا سهواً سرویس نامحدود داده نشود.
+    if not plan_found:
+        try:
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT traffic_gb FROM xui_accounts WHERE email = ? AND server_id = ?",
+                (email, server_id),
+            )
+            a = cur.fetchone()
+            conn.close()
+            if a and a["traffic_gb"]:
+                plan_gb = int(a["traffic_gb"])
+        except Exception:
+            pass
 
     result = await renew_account(email, server_id, plan_gb, plan_days)
     if not result:
