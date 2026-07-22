@@ -352,6 +352,8 @@ def payment_methods_keyboard(plan_id: int):
                               callback_data="payment_currency:" + str(plan_id) + ":toman")],
         [InlineKeyboardButton(text=T("paykb_wallet", "💰 پرداخت از کیف‌پول"),
                               callback_data="payment_currency:" + str(plan_id) + ":wallet")],
+        [InlineKeyboardButton(text=T("shop_btn_back", "⬅️ بازگشت"),
+                              callback_data="shop_back:categories")],
     ])
 
 
@@ -362,6 +364,8 @@ def payment_methods_keyboard_with_discount(plan_id: int, discount_code: str):
                               callback_data="payment_currency_discount:" + str(plan_id) + ":toman:" + discount_code)],
         [InlineKeyboardButton(text=T("paykb_wallet", "💰 پرداخت از کیف‌پول"),
                               callback_data="payment_currency_discount:" + str(plan_id) + ":wallet:" + discount_code)],
+        [InlineKeyboardButton(text=T("shop_btn_back", "⬅️ بازگشت"),
+                              callback_data="shop_back:categories")],
     ])
 
 
@@ -372,6 +376,8 @@ def payment_methods_for_order_keyboard(order_id: int):
                               callback_data="payment_method:" + str(order_id) + ":card")],
         [InlineKeyboardButton(text=T("paykb_wallet", "💰 پرداخت از کیف‌پول"),
                               callback_data="payment_method:" + str(order_id) + ":wallet")],
+        [InlineKeyboardButton(text=T("shop_btn_back", "⬅️ بازگشت"),
+                              callback_data="shop_back:categories")],
     ])
 
 
@@ -382,6 +388,8 @@ def toman_payment_keyboard(order_id: int):
                               callback_data="payment_method:" + str(order_id) + ":card")],
         [InlineKeyboardButton(text=T("paykb_wallet", "💰 پرداخت از کیف‌پول"),
                               callback_data="payment_method:" + str(order_id) + ":wallet")],
+        [InlineKeyboardButton(text=T("shop_btn_back", "⬅️ بازگشت"),
+                              callback_data="shop_back:categories")],
     ])
 
 
@@ -397,6 +405,8 @@ def starlink_volume_keyboard():
         ])
     rows.append([InlineKeyboardButton(text=T("volkb_custom", "✍️ حجم دلخواه"),
                                       callback_data="starlink_volume:custom")])
+    rows.append([InlineKeyboardButton(text=T("shop_btn_back", "⬅️ بازگشت"),
+                                      callback_data="shop_back:categories")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -405,6 +415,8 @@ def shop_category_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=T("shop_cat_starlink", "استارلینک اختصاصی"),
                               callback_data="shop_category:starlink")],
+        [InlineKeyboardButton(text=T("shop_btn_back", "⬅️ بازگشت"),
+                              callback_data="u:menu")],
     ])
 
 

@@ -93,69 +93,127 @@ def update_daily_analytics():
 
 
 def get_daily_analytics(days: int = 7) -> list:
-    """آمار روزانه (آخر N روز)"""
+    """
+    آمار روزانه (آخر N روز) — مستقیم از جدول‌های زنده محاسبه می‌شود.
+
+    قبلاً از جدول کشِ daily_analytics خوانده می‌شد که چون update_daily_analytics
+    هیچ‌جا صدا زده نمی‌شد همیشه خالی بود و همهٔ گزارش‌ها صفر نشان می‌دادند.
+    """
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT * FROM daily_analytics
-        ORDER BY date DESC LIMIT ?
+        SELECT DATE(created_at) AS date,
+               COUNT(*) AS total_orders,
+               COALESCE(SUM(CASE WHEN status = 'approved'
+                    THEN COALESCE(final_price_toman, price_toman, 0) ELSE 0 END), 0)
+                    AS total_revenue_toman
+        FROM orders
+        WHERE created_at IS NOT NULL AND created_at != ''
+        GROUP BY DATE(created_at)
+        ORDER BY date DESC
+        LIMIT ?
         """,
         (days,),
     )
-    rows = cursor.fetchall()
+    rows = [dict(r) for r in cursor.fetchall()]
+
+    # کاربران جدید هر روز
+    cursor.execute(
+        """
+        SELECT DATE(created_at) AS date, COUNT(*) AS new_users
+        FROM users
+        WHERE created_at IS NOT NULL AND created_at != ''
+        GROUP BY DATE(created_at)
+        """
+    )
+    new_by_date = {r["date"]: r["new_users"] for r in cursor.fetchall()}
+
+    cursor.execute("SELECT COUNT(*) AS c FROM users")
+    total_users = cursor.fetchone()["c"]
     conn.close()
-    return [dict(r) for r in rows]
+
+    for r in rows:
+        r["new_users"] = new_by_date.get(r["date"], 0)
+        r["total_users"] = total_users
+    return rows
 
 
 def get_revenue_chart_data(days: int = 30) -> dict:
-    """داده‌های نمودار درآمد"""
+    """داده‌های نمودار درآمد — زنده از جدول سفارش‌ها."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT date, total_revenue_toman FROM daily_analytics
-        ORDER BY date DESC LIMIT ?
+        SELECT DATE(created_at) AS date,
+               COALESCE(SUM(COALESCE(final_price_toman, price_toman, 0)), 0) AS revenue
+        FROM orders
+        WHERE status = 'approved' AND created_at IS NOT NULL AND created_at != ''
+        GROUP BY DATE(created_at)
+        ORDER BY date DESC
+        LIMIT ?
         """,
         (days,),
     )
     rows = cursor.fetchall()
     conn.close()
-    
+
     data = {}
     for row in reversed(rows):
-        data[row["date"]] = row["total_revenue_toman"]
-    
+        data[row["date"]] = row["revenue"]
     return data
 
 
 def get_report_data(start_date: str, end_date: str) -> dict:
-    """گزارش درآمد بین تاریخ‌ها"""
+    """گزارش درآمد بین دو تاریخ — زنده از جدول سفارش‌ها."""
     conn = get_connection()
     cursor = conn.cursor()
-    
+
+    # جمع کل در بازه
     cursor.execute(
         """
-        SELECT 
-            SUM(total_orders) as total_orders,
-            SUM(total_revenue_toman) as total_revenue,
-            AVG(total_revenue_toman) as avg_daily_revenue,
-            MAX(total_revenue_toman) as max_daily_revenue,
-            MIN(total_revenue_toman) as min_daily_revenue
-        FROM daily_analytics
-        WHERE date BETWEEN ? AND ?
+        SELECT COUNT(*) AS total_orders,
+               COALESCE(SUM(CASE WHEN status = 'approved'
+                    THEN COALESCE(final_price_toman, price_toman, 0) ELSE 0 END), 0)
+                    AS total_revenue,
+               COALESCE(SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END), 0)
+                    AS approved_orders
+        FROM orders
+        WHERE DATE(created_at) BETWEEN ? AND ?
         """,
         (start_date, end_date),
     )
-    row = cursor.fetchone()
+    tot = cursor.fetchone()
+
+    # درآمد روزانه برای میانگین/بیشینه/کمینه
+    cursor.execute(
+        """
+        SELECT DATE(created_at) AS d,
+               COALESCE(SUM(COALESCE(final_price_toman, price_toman, 0)), 0) AS rev
+        FROM orders
+        WHERE status = 'approved' AND DATE(created_at) BETWEEN ? AND ?
+        GROUP BY DATE(created_at)
+        """,
+        (start_date, end_date),
+    )
+    daily = [r["rev"] for r in cursor.fetchall()]
+
+    # کاربران جدید در بازه
+    cursor.execute(
+        "SELECT COUNT(*) AS c FROM users WHERE DATE(created_at) BETWEEN ? AND ?",
+        (start_date, end_date),
+    )
+    new_users = cursor.fetchone()["c"]
     conn.close()
-    
+
     return {
-        "total_orders": row["total_orders"] or 0,
-        "total_revenue": row["total_revenue"] or 0,
-        "avg_daily_revenue": int(row["avg_daily_revenue"] or 0),
-        "max_daily_revenue": row["max_daily_revenue"] or 0,
-        "min_daily_revenue": row["min_daily_revenue"] or 0,
+        "total_orders": tot["total_orders"] or 0,
+        "approved_orders": tot["approved_orders"] or 0,
+        "total_revenue": tot["total_revenue"] or 0,
+        "new_users": new_users or 0,
+        "avg_daily_revenue": int(sum(daily) / len(daily)) if daily else 0,
+        "max_daily_revenue": max(daily) if daily else 0,
+        "min_daily_revenue": min(daily) if daily else 0,
     }
 
 

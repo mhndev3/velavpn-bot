@@ -105,6 +105,46 @@ def add_to_wallet(telegram_id: int, amount_toman: int, description: str = "", co
     return True
 
 
+def set_wallet_balance(telegram_id: int, new_balance: int, changed_by: int = 0) -> dict:
+    """
+    موجودی کیف پول را مستقیماً روی مقدار مشخص «تنظیم» می‌کند (کار ادمین).
+
+    تفاوت اختلاف با موجودی قبلی به‌عنوان یک تراکنش ثبت می‌شود تا سابقه گم نشود.
+    خروجی: dict شامل موجودی قبلی/جدید و مقدار تغییر.
+    """
+    new_balance = max(0, int(new_balance))
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT balance_toman FROM wallets WHERE telegram_id = ?", (telegram_id,))
+    row = cursor.fetchone()
+    old_balance = row["balance_toman"] if row else 0
+    delta = new_balance - old_balance
+
+    cursor.execute(
+        "INSERT OR IGNORE INTO wallets (telegram_id, balance_toman) VALUES (?, 0)",
+        (telegram_id,),
+    )
+    cursor.execute(
+        "UPDATE wallets SET balance_toman = ?, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = ?",
+        (new_balance, telegram_id),
+    )
+
+    if delta != 0:
+        desc = "تنظیم دستی موجودی توسط ادمین"
+        if changed_by:
+            desc += " (" + str(changed_by) + ")"
+        cursor.execute(
+            "INSERT INTO wallet_transactions (telegram_id, type, amount_toman, description, balance_after) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (telegram_id, "charge" if delta > 0 else "deduct", abs(delta), desc, new_balance),
+        )
+
+    conn.commit()
+    conn.close()
+    return {"old": old_balance, "new": new_balance, "delta": delta}
+
+
 def deduct_from_wallet(telegram_id: int, amount_toman: int, order_id: int = None) -> bool:
     wallet = get_wallet(telegram_id)
     if not wallet or wallet["balance_toman"] < amount_toman:

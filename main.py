@@ -39,6 +39,7 @@ from handlers import (
     admin_panel, admin_discounts, admin_tickets, admin_content,
     admin_broadcast, admin_analytics, admin_ui_settings,
     head_admin_panel, head_admin_wallet, head_admin_pricing, head_admin_apps, head_admin_test,
+    head_admin_users,
     sub_admin_panel, global_navigation,
 )
 from handlers import (
@@ -127,6 +128,7 @@ async def main():
     dp.include_router(add_plan_handler.router)
     dp.include_router(head_admin_apps.router)
     dp.include_router(head_admin_test.router)
+    dp.include_router(head_admin_users.router)
     dp.include_router(head_admin_panel.router)
     dp.include_router(head_admin_wallet.router)
     dp.include_router(head_admin_pricing.router)

@@ -496,19 +496,6 @@ async def ha_stats(cb: CallbackQuery):
     await cb.answer()
 
 
-@router.callback_query(F.data == "ha:users")
-async def ha_users(cb: CallbackQuery):
-    if not is_admin(cb.from_user.id):
-        return
-    users = get_recent_users(15)
-    text = "👥 آخرین کاربران:\n\n"
-    for u in users:
-        un = "@" + u["username"] if u.get("username") else "—"
-        text += "• " + str(u["full_name"]) + " | " + un + " | " + str(u["telegram_id"]) + "\n"
-    await cb.message.edit_text(text or "کاربری نیست", reply_markup=back_kb())
-    await cb.answer()
-
-
 @router.callback_query(F.data == "ha:orders")
 async def ha_orders(cb: CallbackQuery):
     if not is_admin(cb.from_user.id):
