@@ -43,6 +43,80 @@ def _random_config_name() -> str:
     return "vpn-" + "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
 
 
+def _random_config_names(count: int) -> list:
+    """`count` نامِ تصادفیِ یکتا می‌سازد (برای سفارش چند-اکانتی)."""
+    names, seen = [], set()
+    guard = 0
+    while len(names) < max(1, count) and guard < count * 20 + 50:
+        guard += 1
+        n = _random_config_name()
+        if n not in seen:
+            seen.add(n)
+            names.append(n)
+    return names
+
+
+def _split_names(raw: str) -> list:
+    """
+    ورودی کاربر را به فهرست نام تبدیل می‌کند.
+
+    جداکننده‌ها: کاما (انگلیسی و فارسی)، خط جدید، سمی‌کالن و فاصله.
+    هر نام جداگانه امن‌سازی می‌شود و موارد خالی حذف می‌شوند.
+    """
+    if not raw:
+        return []
+    parts = re.split(r"[,\u060C;\n\r\t ]+", raw.strip())
+    out = []
+    for p in parts:
+        s = _sanitize_name(p)
+        if s:
+            out.append(s)
+    return out
+
+
+def _expand_names(names: list, qty: int) -> list:
+    """
+    فهرست نام‌ها را به اندازهٔ `qty` می‌رساند و یکتا می‌کند.
+
+    - اگر کاربر یک نام برای چند اکانت داده باشد، شماره‌گذاری می‌شود:
+      name, name-2, name-3 …
+    - اگر کمتر از تعداد داده باشد، بقیه از آخرین نام شماره‌گذاری می‌شوند.
+    - اگر بیشتر داده باشد، فقط `qty` تای اول استفاده می‌شود.
+    - نام‌های تکراری هم شماره می‌گیرند تا روی پنل تداخل نکنند.
+    """
+    qty = max(1, int(qty or 1))
+    base = [n for n in (names or []) if n]
+    if not base:
+        return _random_config_names(qty)
+
+    out, seen = [], set()
+
+    def _add(candidate: str):
+        c = candidate[:24] or "vpn"
+        if c not in seen:
+            seen.add(c)
+            out.append(c)
+            return
+        i = 2
+        while (c + "-" + str(i))[:24] in seen:
+            i += 1
+        c2 = (c + "-" + str(i))[:24]
+        seen.add(c2)
+        out.append(c2)
+
+    for n in base[:qty]:
+        _add(n)
+
+    # کمبود را از آخرین نام شماره‌گذاری کن
+    stem = base[-1]
+    i = 2
+    while len(out) < qty:
+        _add(stem + "-" + str(i))
+        i += 1
+
+    return out[:qty]
+
+
 def _name_kb():
     """کیبورد مرحلهٔ انتخاب نام: دکمهٔ ساخت نام رندوم + بازگشت."""
     from services.ui_texts import T
@@ -680,21 +754,12 @@ async def buy_plan_from_db(callback: CallbackQuery, state: FSMContext):
 
     await state.clear()
     await state.update_data(buy_plan_id=plan_id)
-    await state.set_state(BuyStates.waiting_config_name)
-    await callback.message.answer(
-        T("buy_name_title", "🏷 <b>نام کانفیگت را انتخاب کن</b>") + "\n"
-        "━━━━━━━━━━━━━━\n\n"
-        + T("buy_name_hint",
-            "یک نام دلخواه برای کانفیگت بفرست (فقط حروف انگلیسی، عدد، ـ یا -).\n"
-            "مثلاً: <code>ali-vpn</code>\n\n"
-            "یا برای ساخت خودکار، دکمهٔ زیر را بزن:"),
-        reply_markup=_name_kb(),
-    )
+    await _ask_quantity(callback.message, state)
     await callback.answer()
 
 
 async def _ask_quantity(target, state: FSMContext):
-    """پس از تعیین نام، تعداد اکانت را می‌پرسد."""
+    """اول تعداد اکانت را می‌پرسد (بعد نام‌ها، چون تعداد نام‌ها به آن بستگی دارد)."""
     from services.ui_texts import T
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     await state.set_state(BuyStates.waiting_quantity)
@@ -709,34 +774,166 @@ async def _ask_quantity(target, state: FSMContext):
     )
 
 
+async def _ask_config_name(target, state: FSMContext, qty: int):
+    """
+    نام کانفیگ‌ها را می‌پرسد؛ راهنما بر اساس تعداد تنظیم می‌شود.
+
+    برای سفارش چند-اکانتی توضیح می‌دهد که چطور چند نام وارد شود و اگر یک نام
+    بدهد چه اتفاقی می‌افتد.
+    """
+    from services.ui_texts import T, TF
+    await state.set_state(BuyStates.waiting_config_name)
+
+    rules = T(
+        "buy_name_rules",
+        "📌 <b>قواعد نام:</b>\n"
+        "• فقط حروف <b>انگلیسی</b> و عدد (فارسی قابل قبول نیست)\n"
+        "• بدون فاصله — به‌جای فاصله از <code>_</code> یا <code>-</code> استفاده کن\n"
+        "• بدون علامت‌های خاص مثل <code>@ # $ % / \\ ( )</code>\n"
+        "• حداکثر ۲۴ کاراکتر",
+    )
+
+    if qty > 1:
+        body = TF(
+            "buy_name_multi_hint",
+            "برای <b>{qty}</b> اکانت، {qty} نام بفرست — با کاما یا خط جدید جدا کن.\n\n"
+            "مثال:\n<code>ali-1, ali-2, ali-3</code>\n\n"
+            "🔹 اگر فقط <b>یک</b> نام بفرستی، بقیه خودکار شماره می‌گیرند "
+            "(مثلاً <code>ali</code> → <code>ali</code>, <code>ali-2</code>, <code>ali-3</code>)\n"
+            "🔹 اگر کمتر از {qty} نام بفرستی، بقیه از آخرین نام ساخته می‌شوند\n"
+            "🔹 یا دکمهٔ زیر را بزن تا برای هر {qty} اکانت نام رندوم ساخته شود",
+            qty=_fa(qty),
+        )
+    else:
+        body = T(
+            "buy_name_single_hint",
+            "یک نام دلخواه برای کانفیگت بفرست.\n"
+            "مثلاً: <code>ali-vpn</code>\n\n"
+            "یا برای ساخت خودکار، دکمهٔ زیر را بزن:",
+        )
+
+    await target.answer(
+        T("buy_name_title", "🏷 <b>نام کانفیگت را انتخاب کن</b>") + "\n"
+        "━━━━━━━━━━━━━━\n\n" + body + "\n\n" + rules,
+        reply_markup=_name_kb(),
+    )
+
+
 @router.callback_query(BuyStates.waiting_config_name, F.data == "buy:randname")
 async def buy_random_name(callback: CallbackQuery, state: FSMContext):
-    name = _random_config_name()
-    await state.update_data(config_name=name)
+    """ساخت نام رندوم — برای سفارش چند-اکانتی، به تعداد اکانت‌ها نام می‌سازد."""
+    data = await state.get_data()
+    qty = int(data.get("buy_qty") or 1)
+    names = _random_config_names(qty)
     await callback.answer(T("buy_name_made", "🎲 نام ساخته شد"))
-    await callback.message.answer(TF("buy_name_show", "🏷 نام کانفیگ: <code>{name}</code>", name=name))
-    await _ask_quantity(callback.message, state)
+    if qty > 1:
+        shown = "\n".join("• <code>" + n + "</code>" for n in names)
+        await callback.message.answer(
+            TF("buy_names_show_multi", "🏷 نام‌های ساخته‌شده ({qty} عدد):\n{names}",
+               qty=_fa(qty), names=shown)
+        )
+    else:
+        await callback.message.answer(
+            TF("buy_name_show", "🏷 نام کانفیگ: <code>{name}</code>", name=names[0])
+        )
+    await _finalize_buy_order(callback.message, state, callback.from_user.id, names, qty)
 
 
 @router.message(BuyStates.waiting_config_name)
 async def buy_config_name(msg: Message, state: FSMContext):
     data = await state.get_data()
     plan_id = data.get("buy_plan_id")
+    qty = int(data.get("buy_qty") or 1)
     if not plan_id:
         await state.clear()
         return
+
     raw = (msg.text or "").strip()
-    config_name = "" if raw.lower() in ("skip", "رد", "-", "بی‌خیال", "بیخیال") else _sanitize_name(raw)
-    await state.update_data(config_name=config_name)
-    await _ask_quantity(msg, state)
+    # رد کردن مرحله: نام خودکار ساخته می‌شود
+    if raw.lower() in ("skip", "رد", "-", "بی‌خیال", "بیخیال"):
+        names = _random_config_names(qty)
+    else:
+        given = _split_names(raw)
+        if not given:
+            # هیچ کاراکتر مجازی نمانده (مثلاً کاربر فارسی فرستاده)
+            return await msg.answer(
+                T("buy_name_invalid",
+                  "❌ نام معتبر نبود.\n\n"
+                  "لطفاً فقط از حروف <b>انگلیسی</b> و عدد استفاده کن؛ بدون فاصله و "
+                  "علامت خاص. مثلاً: <code>ali-vpn</code>\n\n"
+                  "یا دکمهٔ «🎲 ساخت نام رندوم» را بزن."),
+                reply_markup=_name_kb(),
+            )
+        names = _expand_names(given, qty)
+        # اگر کاربر کمتر از تعداد نام داد، خبر بده که بقیه چطور ساخته شد
+        if qty > 1 and len(given) < qty:
+            shown = "\n".join("• <code>" + n + "</code>" for n in names)
+            await msg.answer(
+                TF("buy_names_autofilled",
+                   "ℹ️ {given} نام فرستادی و {qty} اکانت سفارش دادی؛ بقیه خودکار ساخته شد:\n{names}",
+                   given=_fa(len(given)), qty=_fa(qty), names=shown)
+            )
+
+    await _finalize_buy_order(msg, state, msg.from_user.id, names, qty)
+
+
+async def _finalize_buy_order(target, state: FSMContext, user_id: int, names: list, qty: int):
+    """سفارش را در دیتابیس می‌سازد و فاکتور را نمایش می‌دهد."""
+    data = await state.get_data()
+    plan_id = data.get("buy_plan_id")
+    plan = _get_active_plan(plan_id) if plan_id else None
+    if not plan:
+        await state.clear()
+        return await target.answer(T("shop_plan_gone", "این پلن دیگر موجود نیست."))
+
+    names = _expand_names(names, qty)
+    config_name = ",".join(names)
+    order_id = _create_db_order(user_id, plan, plan_id, config_name, qty)
+    await state.clear()
+
+    unit = plan["price_toman"]
+    total = unit * qty
+    gb = str(plan["traffic_gb"]) + " GB" if plan.get("traffic_gb") else T("u_unlimited", "نامحدود")
+    dur = _dur_label(plan["duration_days"]) if plan.get("duration_days") else T("u_no_expiry", "بی‌انقضا")
+
+    if qty > 1:
+        name_line = TF("shop_invoice_names_line", "🏷 نام‌ها: {names}\n",
+                       names="، ".join(names))
+    else:
+        name_line = TF("shop_invoice_name_line", "🏷 نام کانفیگ: {name}\n", name=names[0])
+
+    qty_block = TF(
+        "shop_invoice_qty_block",
+        "🔢 تعداد: {qty} عدد\n"
+        "💵 قیمت واحد: {unit} تومان\n",
+        qty="{:,}".format(qty), unit="{:,}".format(unit),
+    ) if qty > 1 else ""
+
+    text = TF(
+        "shop_invoice",
+        "✅ سفارش ثبت شد\n"
+        "━━━━━━━━━━━━━━\n\n"
+        "{name_line}"
+        "پلن: {plan}\n"
+        "حجم: {gb}\n"
+        "مدت: {dur}\n"
+        "{qty_block}"
+        "💰 مبلغ قابل پرداخت: {total} تومان\n\n"
+        "{hint}",
+        name_line=name_line, plan=plan["title"], gb=gb, dur=dur, qty_block=qty_block,
+        total="{:,}".format(total),
+        hint=T("disc_decision_hint", "اگر کد تخفیف داری، اعمالش کن؛ در غیر این صورت بدون کد ادامه بده:"),
+    )
+    from keyboards.user_keyboards import discount_decision_for_order
+    await target.answer(text, reply_markup=discount_decision_for_order(order_id))
 
 
 @router.message(BuyStates.waiting_quantity)
 async def buy_quantity(msg: Message, state: FSMContext):
+    """تعداد را می‌گیرد و بعد نام‌ها را می‌پرسد."""
     from services.ui_texts import T
     data = await state.get_data()
     plan_id = data.get("buy_plan_id")
-    config_name = data.get("config_name", "")
     if not plan_id:
         await state.clear()
         return
@@ -754,37 +951,8 @@ async def buy_quantity(msg: Message, state: FSMContext):
         await state.clear()
         return await msg.answer(T("shop_plan_gone", "این پلن دیگر موجود نیست."))
 
-    order_id = _create_db_order(msg.from_user.id, plan, plan_id, config_name, qty)
-    await state.clear()
-
-    unit = plan["price_toman"]
-    total = unit * qty
-    gb = str(plan["traffic_gb"]) + " GB" if plan.get("traffic_gb") else T("u_unlimited", "نامحدود")
-    dur = _dur_label(plan["duration_days"]) if plan.get("duration_days") else T("u_no_expiry", "بی‌انقضا")
-    name_line = TF("shop_invoice_name_line", "🏷 نام کانفیگ: {name}\n", name=config_name) if config_name else ""
-    qty_block = TF(
-        "shop_invoice_qty_block",
-        "🔢 تعداد: {qty} عدد\n"
-        "💵 قیمت واحد: {unit} تومان\n",
-        qty="{:,}".format(qty), unit="{:,}".format(unit),
-    ) if qty > 1 else ""
-    text = TF(
-        "shop_invoice",
-        "✅ سفارش ثبت شد\n"
-        "━━━━━━━━━━━━━━\n\n"
-        "{name_line}"
-        "پلن: {plan}\n"
-        "حجم: {gb}\n"
-        "مدت: {dur}\n"
-        "{qty_block}"
-        "💰 مبلغ قابل پرداخت: {total} تومان\n\n"
-        "{hint}",
-        name_line=name_line, plan=plan["title"], gb=gb, dur=dur, qty_block=qty_block,
-        total="{:,}".format(total),
-        hint=T("disc_decision_hint", "اگر کد تخفیف داری، اعمالش کن؛ در غیر این صورت بدون کد ادامه بده:"),
-    )
-    from keyboards.user_keyboards import discount_decision_for_order
-    await msg.answer(text, reply_markup=discount_decision_for_order(order_id))
+    await state.update_data(buy_qty=qty)
+    await _ask_config_name(msg, state, qty)
 
 
 @router.callback_query(F.data == "shop_back:categories")

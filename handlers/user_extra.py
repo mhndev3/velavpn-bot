@@ -228,7 +228,12 @@ def _sub_meta(telegram_id: int, order_id: int, account_id: int = None) -> dict:
         conn.close()
         if r:
             d = dict(r)
-            meta["config_name"] = (d.get("config_name") or "").strip()
+            _cn = (d.get("config_name") or "").strip()
+            # سفارش چند-اکانتی: config_name فهرستِ نام‌ها (جدا با کاما) است، پس
+            # نامِ هر اکانت باید از ایمیل خودش خوانده شود نه از کل فهرست.
+            if "," in _cn:
+                _cn = ""
+            meta["config_name"] = _cn
             meta["gb"] = int(d.get("traffic_gb") or 0)
             meta["days"] = int(d.get("p_days") or d.get("o_days") or 0)
             meta["location"] = (d.get("server_label") or "").strip()

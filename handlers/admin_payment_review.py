@@ -267,23 +267,28 @@ async def admin_approve_payment_handler(callback: CallbackQuery, state: FSMConte
 
     # ── اول X-UI (بدون هیچ DB write) ──
     quantity = int(order.get("quantity") or 1)
+    # نام‌های انتخابیِ مشتری (سفارش چند-اکانتی: فهرست جدا با کاما)
+    _names = [n.strip() for n in str(order.get("config_name") or "").split(",") if n.strip()]
     result = await provision_account(
         order_id=order_id,
         telegram_id=target_user_id,
         plan=plan or {"duration_days": int(order.get("duration_days") or 30), "traffic_gb": 0},
         server_id=server_id,
+        custom_name=(_names[0] if _names else ""),
     )
 
-    # اکانت‌های اضافی (سفارش چند-تایی): هرکدام با نام یکتا
+    # اکانت‌های اضافی (سفارش چند-تایی): هرکدام با نام انتخابیِ خودش
     extra_results = []
     if result and result.get("config_link") and quantity > 1:
         for i in range(2, quantity + 1):
+            _nm = _names[i - 1] if len(_names) >= i else ""
             extra = await provision_account(
                 order_id=order_id,
                 telegram_id=target_user_id,
                 plan=plan or {"duration_days": int(order.get("duration_days") or 30), "traffic_gb": 0},
                 server_id=server_id,
-                name_suffix="-" + str(i),
+                custom_name=_nm,
+                name_suffix=("" if _nm else "-" + str(i)),
             )
             if extra and extra.get("config_link"):
                 extra_results.append(extra)

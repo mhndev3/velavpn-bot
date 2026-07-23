@@ -720,18 +720,23 @@ async def provision_account(order_id: int, telegram_id: int,
         duration_days = int(plan.get("duration_days", 30)) if plan else 30
         # نام دلخواه مشتری (اگر موقع خرید انتخاب کرده باشد) به‌عنوان remark/email کانفیگ
         email = f"u{telegram_id}_{order_id}"
-        try:
-            from database.db import get_connection
-            _conn = get_connection()
-            _cur = _conn.cursor()
-            _cur.execute("SELECT config_name FROM orders WHERE id = ?", (order_id,))
-            _row = _cur.fetchone()
-            _conn.close()
-            _cn = (str(_row["config_name"]).strip() if _row and _row["config_name"] else "")
-            if _cn:
-                email = _cn
-        except Exception:
-            pass
+        if custom_name and str(custom_name).strip():
+            # نام صریحِ همین اکانت (سفارش چند-اکانتی: هر اکانت نام خودش را دارد)
+            email = str(custom_name).strip()
+        else:
+            try:
+                from database.db import get_connection
+                _conn = get_connection()
+                _cur = _conn.cursor()
+                _cur.execute("SELECT config_name FROM orders WHERE id = ?", (order_id,))
+                _row = _cur.fetchone()
+                _conn.close()
+                _cn = (str(_row["config_name"]).strip() if _row and _row["config_name"] else "")
+                if _cn:
+                    # config_name می‌تواند فهرست نام‌ها (جدا با کاما) باشد؛ اولی را بردار
+                    email = _cn.split(",")[0].strip() or email
+            except Exception:
+                pass
         # برای سفارش چند-اکانتی، پسوند یکتا به نام هر کانفیگ اضافه می‌شود
         if name_suffix:
             email = email + name_suffix

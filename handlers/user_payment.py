@@ -434,21 +434,26 @@ async def process_wallet_payment(message_obj, telegram_id: int, order_id: int, s
             "duration_days": int(order.get("duration_days") or 30),
             "traffic_gb": int(order.get("traffic_gb") or 0),
         }
+        # نام‌های انتخابیِ مشتری (فهرست جدا با کاما برای سفارش چند-اکانتی)
+        _names = [n.strip() for n in str(order.get("config_name") or "").split(",") if n.strip()]
         result = await provision_account(
             order_id=order_id, telegram_id=telegram_id,
             plan=plan_data, server_id=server_id,
+            custom_name=(_names[0] if _names else ""),
         )
 
-        # سفارش چند-تایی: بقیهٔ اکانت‌ها با نام یکتا ساخته می‌شوند
+        # سفارش چند-تایی: بقیهٔ اکانت‌ها با نام انتخابیِ خودشان ساخته می‌شوند
         # (بدون این حلقه، خرید با تعداد بیشتر از یک فقط یک کانفیگ می‌ساخت)
         _qty_prov = int(order.get("quantity") or 1)
         if result and result.get("config_link") and _qty_prov > 1:
             for _i in range(2, _qty_prov + 1):
                 try:
+                    _nm = _names[_i - 1] if len(_names) >= _i else ""
                     _ex = await provision_account(
                         order_id=order_id, telegram_id=telegram_id,
                         plan=plan_data, server_id=server_id,
-                        name_suffix="-" + str(_i),
+                        custom_name=_nm,
+                        name_suffix=("" if _nm else "-" + str(_i)),
                     )
                     if _ex and _ex.get("config_link"):
                         extra_results.append(_ex)
