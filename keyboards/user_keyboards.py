@@ -239,6 +239,15 @@ def main_menu_inline_for(telegram_id: int):
         if not _hidden("btn_referral"):
             rows.append([InlineKeyboardButton(text=_get("btn_referral", "🎁 دعوت دوستان"), callback_data="menu:referral")])
 
+    # هد‌ادمین: دسترسی به پنل مدیریت باید در حالت شیشه‌ای هم حفظ شود،
+    # چون کیبورد معمولی (که دکمهٔ پنل داشت) با لانچر عوض می‌شود.
+    try:
+        from database.db import is_head_admin
+        if is_head_admin(telegram_id):
+            rows.append([InlineKeyboardButton(text="👑 پنل هد ادمین", callback_data="ha:home")])
+    except Exception:
+        pass
+
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

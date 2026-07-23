@@ -47,11 +47,34 @@ _DISPATCH = {
 }
 
 
+async def _apply_launcher_kb(target):
+    """
+    کیبورد پایین صفحه را با لانچر «📋 منو» جایگزین می‌کند.
+
+    در تلگرام کیبورد معمولی (ReplyKeyboard) وضعیت چتِ کاربر است و تا زمانی که
+    کیبورد جدیدی فرستاده نشود باقی می‌ماند؛ فرستادن دکمه‌های inline آن را پاک
+    نمی‌کند. بدون این کار، وقتی حالت شیشه‌ای روشن می‌شود کیبورد قدیمی روی صفحهٔ
+    کاربر می‌ماند و دکمه‌های آن به هندلرهای معمولی می‌روند (پس منوی شیشه‌ای
+    عملاً باز نمی‌شود).
+
+    توجه: این پیام حذف نمی‌شود؛ حذفِ پیامی که کیبورد را حمل می‌کند در بعضی
+    کلاینت‌ها کیبورد را هم برمی‌گرداند و باگ قبلی همین بود.
+    """
+    try:
+        await target.answer(
+            T("glass_launcher_hint", "برای باز کردن منو دکمهٔ «📋 منو» را بزنید."),
+            reply_markup=glass_launcher_kb(),
+        )
+    except Exception:
+        pass
+
+
 async def send_user_menu(target, uid: int):
     """منوی اصلی را بسته به حالت شیشه‌ای می‌فرستد. target باید متد async answer داشته باشد."""
     txt = get_setting("txt_menu", "منوی اصلی:")
-    if is_glass_mode() and not is_head_admin(uid):
-        # فقط خود منوی شیشه‌ای؛ بدون هیچ متن/پیام اضافه. دکمهٔ «📋 منو» هم روی همین پیام.
+    if is_glass_mode():
+        # کیبورد معمولیِ قبلی را با لانچر عوض کن، بعد منوی شیشه‌ای را بفرست
+        await _apply_launcher_kb(target)
         await target.answer(txt, reply_markup=main_menu_inline_for(uid))
     else:
         await target.answer(txt, reply_markup=main_menu_keyboard_for(uid))
@@ -61,7 +84,7 @@ async def send_user_menu(target, uid: int):
 async def open_glass_menu(msg: Message, state: FSMContext):
     await state.clear()
     txt = get_setting("txt_menu", "منوی اصلی:")
-    if is_glass_mode() and not is_head_admin(msg.from_user.id):
+    if is_glass_mode():
         await msg.answer(txt, reply_markup=main_menu_inline_for(msg.from_user.id))
     else:
         await msg.answer(txt, reply_markup=main_menu_keyboard_for(msg.from_user.id))

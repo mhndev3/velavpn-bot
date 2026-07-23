@@ -375,6 +375,70 @@ def _run_migrations(cursor):
         except Exception:
             pass
 
+    _migrate_xui_accounts_drop_unique(cursor)
+
+
+def _migrate_xui_accounts_drop_unique(cursor):
+    """
+    حذف قید UNIQUE از xui_accounts.order_id.
+
+    چرا: یک سفارش می‌تواند چند اکانت داشته باشد (خرید با تعداد بیشتر از یک).
+    با قید UNIQUE روی order_id، ذخیرهٔ اکانت دوم اکانت اول را جایگزین می‌کرد
+    (INSERT OR REPLACE) و در نتیجه فقط یکی از کانفیگ‌ها در «اشتراک‌های من»
+    دیده می‌شد. SQLite امکان حذف مستقیم قید را ندارد، پس جدول بازسازی می‌شود.
+    """
+    try:
+        cursor.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='xui_accounts'"
+        )
+        row = cursor.fetchone()
+        if not row:
+            return
+        ddl = row[0] or ""
+        # فقط اگر قید UNIQUE روی order_id هنوز وجود دارد
+        if "UNIQUE" not in ddl.upper():
+            return
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS xui_accounts_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER NOT NULL,
+                order_id INTEGER NOT NULL,
+                server_id INTEGER NOT NULL,
+                xui_client_id TEXT,
+                xui_inbound_id INTEGER,
+                email TEXT,
+                config_link TEXT,
+                config_type TEXT,
+                traffic_gb INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'active',
+                expires_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                sub_id TEXT DEFAULT ''
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO xui_accounts_new
+                (id, telegram_id, order_id, server_id, xui_client_id, xui_inbound_id,
+                 email, config_link, config_type, traffic_gb, status, expires_at,
+                 created_at, sub_id)
+            SELECT id, telegram_id, order_id, server_id, xui_client_id, xui_inbound_id,
+                   email, config_link, config_type, traffic_gb, status, expires_at,
+                   created_at, COALESCE(sub_id, '')
+            FROM xui_accounts
+        """)
+        cursor.execute("DROP TABLE xui_accounts")
+        cursor.execute("ALTER TABLE xui_accounts_new RENAME TO xui_accounts")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_xui_accounts_order ON xui_accounts(order_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_xui_accounts_user ON xui_accounts(telegram_id)"
+        )
+        print("[migration] xui_accounts.order_id UNIQUE constraint removed")
+    except Exception as e:
+        print("[migration] xui_accounts rebuild skipped:", e)
+
 
 # ─── Bot Settings (با کش حافظه‌ای برای مقیاس‌پذیری) ───────────
 # تنظیمات خیلی زیاد خوانده می‌شوند (هر رندر منو ~۲۰ بار) ولی به‌ندرت تغییر می‌کنند.
@@ -823,7 +887,7 @@ def save_xui_account(telegram_id: int, order_id: int, server_id: int,
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT OR REPLACE INTO xui_accounts
+            INSERT INTO xui_accounts
             (telegram_id, order_id, server_id, xui_client_id, xui_inbound_id,
              email, config_link, config_type, traffic_gb, expires_at, sub_id, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')

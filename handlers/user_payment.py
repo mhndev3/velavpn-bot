@@ -252,15 +252,17 @@ async def _notify_admin_wallet_purchase(bot, order, telegram_id, paid_amount, re
             cfg_block += "\n🔗 لینک:\n<code>" + link + "</code>"
 
     uname = ("@" + username) if (username and not username.startswith("@")) else (username or "—")
+    _is_rnw = bool((order.get("renew_email") or "").strip())
     text = (
-        "🛒 <b>خرید جدید از کیف‌پول</b>\n"
-        "━━━━━━━━━━━━━━\n"
+        ("♻️ <b>تمدید از کیف‌پول</b>\n" if _is_rnw else "🛒 <b>خرید جدید از کیف‌پول</b>\n")
+        + "━━━━━━━━━━━━━━\n"
         "👤 نام: " + (name or "—") + "\n"
         "🆔 آیدی: <code>" + str(telegram_id) + "</code>\n"
         "📛 یوزرنیم: " + uname + "\n"
         + (("📱 تلفن: " + phone + "\n") if phone else "") +
         "━━━━━━━━━━━━━━\n"
         "📦 سرویس: " + str(order.get("service_name") or "—") + "\n"
+        + (("♻️ کانفیگ در حال تمدید: " + str(order.get("renew_email") or "—") + "\n") if _is_rnw else "") +
         "🏷 نام کانفیگ: " + str(order.get("config_name") or "—") + "\n"
         "🔢 تعداد: " + str(qty) + "\n"
         "💵 مبلغ پرداختی: " + "{:,}".format(paid_amount) + " تومان\n"
@@ -426,6 +428,7 @@ async def process_wallet_payment(message_obj, telegram_id: int, order_id: int, s
         server_id = best["id"] if best else None
 
     result = None
+    extra_results = []
     if server_id:
         plan_data = plan or {
             "duration_days": int(order.get("duration_days") or 30),
@@ -435,6 +438,22 @@ async def process_wallet_payment(message_obj, telegram_id: int, order_id: int, s
             order_id=order_id, telegram_id=telegram_id,
             plan=plan_data, server_id=server_id,
         )
+
+        # سفارش چند-تایی: بقیهٔ اکانت‌ها با نام یکتا ساخته می‌شوند
+        # (بدون این حلقه، خرید با تعداد بیشتر از یک فقط یک کانفیگ می‌ساخت)
+        _qty_prov = int(order.get("quantity") or 1)
+        if result and result.get("config_link") and _qty_prov > 1:
+            for _i in range(2, _qty_prov + 1):
+                try:
+                    _ex = await provision_account(
+                        order_id=order_id, telegram_id=telegram_id,
+                        plan=plan_data, server_id=server_id,
+                        name_suffix="-" + str(_i),
+                    )
+                    if _ex and _ex.get("config_link"):
+                        extra_results.append(_ex)
+                except Exception:
+                    pass
 
     # ── بعد همه DB writes در یک تراکنش ──────────────────────
     conn = get_connection()
@@ -467,6 +486,33 @@ async def process_wallet_payment(message_obj, telegram_id: int, order_id: int, s
 
     if result and result.get("config_link"):
         await _finalize_auto_delivery(message_obj, order, payment_id, result)
+        # اکانت‌های اضافیِ سفارش چند-تایی: ذخیره و ارسال هرکدام
+        for _ex in extra_results:
+            try:
+                from database.db import save_xui_account
+                save_xui_account(
+                    telegram_id=telegram_id, order_id=order_id,
+                    server_id=_ex.get("server_id", 0),
+                    xui_client_id=_ex.get("client_id", ""),
+                    xui_inbound_id=_ex.get("inbound_id", 0),
+                    email=_ex.get("email", ""),
+                    config_link=_ex.get("config_link", ""),
+                    config_type=_ex.get("config_type", "vless"),
+                    traffic_gb=_ex.get("traffic_gb", 0),
+                    expires_at=_ex.get("expires_at", ""),
+                    sub_id=_ex.get("sub_id", ""),
+                )
+            except Exception:
+                pass
+            try:
+                await message_obj.bot.send_message(
+                    chat_id=telegram_id,
+                    text=TF("pay_delivered_link", "\n🔗 لینک {type}:\n<code>{link}</code>",
+                            type=_ex.get("config_type", "vless"),
+                            link=_ex.get("config_link", "")),
+                )
+            except Exception:
+                pass
         await state.clear()
         return
 
@@ -480,17 +526,28 @@ async def process_wallet_payment(message_obj, telegram_id: int, order_id: int, s
            service=order["service_name"], price="{:,}".format(final_price))
     )
 
+    _qty = int(order.get("quantity") or 1)
+    _is_renewal = bool((order.get("renew_email") or "").strip())
+    _wallet_txt = (
+        "💰 پرداخت کیف‌پول (نیاز به تحویل دستی)\n\n"
+        "نوع: " + ("♻️ تمدید اشتراک" if _is_renewal else "🆕 خرید جدید") + "\n"
+        "سفارش: #" + str(order_id) + "\n"
+        "کاربر: " + str(telegram_id) + "\n"
+        "سرویس: " + str(order["service_name"]) + "\n"
+        "پلن: " + str(order.get("plan_title") or "—") + "\n"
+    )
+    if _is_renewal:
+        _wallet_txt += "کانفیگ در حال تمدید: " + str(order.get("renew_email") or "—") + "\n"
+    if _qty > 1:
+        _wallet_txt += ("تعداد: " + str(_qty) + " عدد\n"
+                        "قیمت واحد: " + "{:,}".format(order["price_toman"] or 0) + " تومان\n")
+    _wallet_txt += "مبلغ: " + "{:,}".format(final_price) + " تومان"
+
     for admin_id in ADMIN_IDS:
         try:
             await message_obj.bot.send_message(
                 chat_id=admin_id,
-                text=(
-                    "💰 پرداخت کیف‌پول (نیاز به تحویل دستی)\n\n"
-                    "سفارش: #" + str(order_id) + "\n"
-                    "کاربر: " + str(telegram_id) + "\n"
-                    "سرویس: " + str(order["service_name"]) + "\n"
-                    "مبلغ: " + "{:,}".format(final_price) + " تومان"
-                ),
+                text=_wallet_txt,
                 reply_markup=payment_review_keyboard(order_id, payment_id)
             )
         except Exception:
@@ -652,13 +709,30 @@ async def send_payment_report_to_admin(
     final_price = order["final_price_toman"] or order["price_toman"]
     user = message.from_user
 
+    qty = int(order.get("quantity") or 1)
+    is_renewal = bool((order.get("renew_email") or "").strip())
+    unit_price = order["price_toman"] or 0
+
+    head = ("♻️ تمدید اشتراک" if is_renewal else "🆕 خرید جدید")
+
     caption = (
         "💳 رسید پرداخت جدید\n\n"
+        "نوع: " + head + "\n"
         "شماره سفارش: #" + str(order_id) + "\n"
         "کاربر: " + str(user.full_name) + "\n"
         "آیدی: " + str(user.id) + "\n"
         "سرویس: " + str(order["service_name"]) + "\n"
         "پلن: " + str(order["plan_title"]) + "\n"
+    )
+
+    if is_renewal:
+        caption += "کانفیگ در حال تمدید: " + str(order.get("renew_email") or "—") + "\n"
+
+    if qty > 1:
+        caption += ("تعداد: " + str(qty) + " عدد\n"
+                    "قیمت واحد: " + "{:,}".format(unit_price) + " تومان\n")
+
+    caption += (
         "مبلغ: " + "{:,}".format(final_price) + " تومان\n"
         "روش: " + payment_method + "\n\n"
         "رسید:\n" + str(receipt_text or "—")

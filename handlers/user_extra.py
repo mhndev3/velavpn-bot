@@ -90,6 +90,33 @@ def _remaining_text(sub: dict) -> str:
     return TF("u_remaining_h", "⏳ باقیمانده: {hours} ساعت", hours=_fa(hours))
 
 
+def _order_accounts(telegram_id: int, order_id: int) -> list:
+    """
+    همهٔ اکانت‌های پنل مربوط به یک سفارش را برمی‌گرداند.
+
+    سفارش‌های چندتایی (quantity > 1) چند اکانت واقعی می‌سازند ولی فقط یک ردیف
+    در جدول subscriptions دارند؛ پس لیست «اشتراک‌های من» باید روی اکانت‌ها باز
+    شود، نه روی اشتراک‌ها، وگرنه فقط اولی دیده می‌شود.
+    """
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT xa.id, xa.email, xa.server_id, xa.config_link, xa.traffic_gb, "
+            "       xa.expires_at, xs.label AS server_label "
+            "FROM xui_accounts xa LEFT JOIN xui_servers xs ON xs.id = xa.server_id "
+            "WHERE xa.order_id = ? AND xa.telegram_id = ? "
+            "  AND COALESCE(xa.status, '') != 'deleted' "
+            "ORDER BY xa.id",
+            (order_id, telegram_id),
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return rows
+    except Exception:
+        return []
+
+
 async def _send_subs_list(target, uid: int):
     """لیست اشتراک‌ها را می‌فرستد (هم از دکمهٔ منو، هم بعد از بازگشت)."""
     subs = get_user_subscriptions(uid)
@@ -101,17 +128,37 @@ async def _send_subs_list(target, uid: int):
         )
     item_emoji = T("subs_emoji_item", "📦")
     kb_rows = []
+    count = 0
     for s in subs:
-        _m = _sub_meta(uid, s["order_id"])
-        title = (_m.get("config_name") or s.get("plan_title")
-                 or s.get("service_name") or T("subs_item_fallback", "اشتراک")).strip()
-        if len(title) > 40:
-            title = title[:40] + "…"
-        kb_rows.append([_btn(item_emoji + " " + title, "mysub:" + str(s["order_id"]))])
+        oid = s["order_id"]
+        accounts = _order_accounts(uid, oid)
+        base = (s.get("plan_title") or s.get("service_name")
+                or T("subs_item_fallback", "اشتراک")).strip()
+
+        if len(accounts) <= 1:
+            # حالت معمول: یک کانفیگ برای این سفارش
+            _m = _sub_meta(uid, oid)
+            title = (_m.get("config_name") or base).strip()
+            if len(title) > 40:
+                title = title[:40] + "…"
+            kb_rows.append([_btn(item_emoji + " " + title, "mysub:" + str(oid))])
+            count += 1
+        else:
+            # سفارش چندتایی: برای هر کانفیگ یک دکمهٔ جدا
+            for idx, acc in enumerate(accounts, 1):
+                _m = _sub_meta(uid, oid, acc["id"])
+                title = (_m.get("config_name") or acc.get("email") or base).strip()
+                if len(title) > 34:
+                    title = title[:34] + "…"
+                title += " (" + _fa(idx) + ")"
+                kb_rows.append([_btn(item_emoji + " " + title,
+                                     "mysub:" + str(oid) + ":" + str(acc["id"]))])
+                count += 1
+
     kb_rows.append(_back)
     text = TF("subs_list_title", "{title} ({count} مورد):\n\n{hint}",
               title=T("subs_title", "📦 اشتراک‌های فعال شما"),
-              count=_fa(len(subs)),
+              count=_fa(count),
               hint=T("subs_hint", "برای مشاهده جزئیات، حجم و کانفیگ، انتخاب کنید:"))
     kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
     sent = False
@@ -130,8 +177,13 @@ async def my_subscriptions(msg: Message):
     await _send_subs_list(msg, msg.from_user.id)
 
 
-def _sub_meta(telegram_id: int, order_id: int) -> dict:
-    """نام کانفیگِ انتخابیِ مشتری، حجم پلن، مدت و لوکیشن (سرور) را برمی‌گرداند."""
+def _sub_meta(telegram_id: int, order_id: int, account_id: int = None) -> dict:
+    """
+    نام کانفیگِ انتخابیِ مشتری، حجم پلن، مدت و لوکیشن (سرور) را برمی‌گرداند.
+
+    account_id اختیاری است: در سفارش‌های چندتایی مشخص می‌کند کدام اکانت مد نظر
+    است؛ اگر داده نشود اولین اکانت سفارش استفاده می‌شود.
+    """
     meta = {"config_name": "", "gb": 0, "days": 0, "location": ""}
     try:
         conn = get_connection()
@@ -148,13 +200,23 @@ def _sub_meta(telegram_id: int, order_id: int) -> dict:
         )
         r = cur.fetchone()
         # اگر نام کانفیگ در سفارش نبود، از ایمیلِ اکانت پنل بخوان
-        cur.execute(
-            "SELECT xa.email, xa.server_id, xa.traffic_gb AS acc_gb, xa.expires_at AS acc_exp, "
-            "xs.label AS acc_label "
-            "FROM xui_accounts xa LEFT JOIN xui_servers xs ON xs.id = xa.server_id "
-            "WHERE xa.order_id = ? AND xa.telegram_id = ?",
-            (order_id, telegram_id),
-        )
+        # برای سفارش‌های چندتایی، اکانت مشخص (account_id) خوانده می‌شود
+        if account_id:
+            cur.execute(
+                "SELECT xa.email, xa.server_id, xa.traffic_gb AS acc_gb, xa.expires_at AS acc_exp, "
+                "xs.label AS acc_label "
+                "FROM xui_accounts xa LEFT JOIN xui_servers xs ON xs.id = xa.server_id "
+                "WHERE xa.id = ? AND xa.telegram_id = ?",
+                (account_id, telegram_id),
+            )
+        else:
+            cur.execute(
+                "SELECT xa.email, xa.server_id, xa.traffic_gb AS acc_gb, xa.expires_at AS acc_exp, "
+                "xs.label AS acc_label "
+                "FROM xui_accounts xa LEFT JOIN xui_servers xs ON xs.id = xa.server_id "
+                "WHERE xa.order_id = ? AND xa.telegram_id = ? ORDER BY xa.id",
+                (order_id, telegram_id),
+            )
         xa = cur.fetchone()
         # مدت از روی اشتراک (برای کانفیگ‌های واردشده که پلن ندارند)
         cur.execute(
@@ -228,27 +290,41 @@ def _remaining_only(sub: dict) -> str:
     return "\u200f" + TF("u_h", "{hours} ساعت", hours=_fa(hours))
 
 
-async def _build_sub_detail(telegram_id: int, order_id: int):
+async def _build_sub_detail(telegram_id: int, order_id: int, account_id: int = None):
     sub = get_subscription_by_order(telegram_id, order_id)
     if not sub:
         return None, None
-    config_link = _extract_config_link(sub)
-    meta = _sub_meta(telegram_id, order_id)
+    meta = _sub_meta(telegram_id, order_id, account_id)
+
+    # اکانت هدف: در سفارش چندتایی همان اکانت انتخاب‌شده، وگرنه اولین اکانت سفارش
+    accounts = _order_accounts(telegram_id, order_id)
+    acc = None
+    if account_id:
+        acc = next((a for a in accounts if int(a["id"]) == int(account_id)), None)
+    if not acc and accounts:
+        acc = accounts[0]
+
+    # لینک: برای هر اکانت لینک خودش (سفارش چندتایی)، وگرنه از متن تحویل
+    config_link = ""
+    if acc and (acc.get("config_link") or "").strip():
+        config_link = acc["config_link"].strip()
+    if not config_link:
+        config_link = _extract_config_link(sub)
+
+    # پسوند شماره در عنوان برای سفارش‌های چندتایی
+    idx_suffix = ""
+    if acc and len(accounts) > 1:
+        try:
+            idx_suffix = " (" + _fa(accounts.index(acc) + 1) + "/" + _fa(len(accounts)) + ")"
+        except Exception:
+            idx_suffix = ""
 
     remain_line = ""
     pct_line = ""
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT email, server_id FROM xui_accounts WHERE order_id = ? AND telegram_id = ?",
-            (order_id, telegram_id),
-        )
-        xa = cursor.fetchone()
-        conn.close()
-        if xa and xa["email"]:
+        if acc and acc.get("email"):
             from services.xui_service import get_account_stats
-            stats = await get_account_stats(xa["email"], xa["server_id"])
+            stats = await get_account_stats(acc["email"], acc["server_id"])
             if stats:
                 used = stats.get("up", 0) + stats.get("down", 0)
                 total = stats.get("total", 0)
@@ -268,8 +344,11 @@ async def _build_sub_detail(telegram_id: int, order_id: int):
 
     gb_txt = ("\u200f" + _fa(meta["gb"]) + T("u_gig", " گیگ")) if meta["gb"] else T("u_unlimited", "نامحدود")
 
+    # شناسهٔ مسیرِ کالبک‌ها: با اکانت مشخص یا بدون آن
+    ref = str(order_id) + ((":" + str(acc["id"])) if (acc and len(accounts) > 1) else "")
+
     text = (
-        T("subs_lbl_name", "🏷 نام سرویس:") + " " + (meta["config_name"] or "—") + "\n\n"
+        T("subs_lbl_name", "🏷 نام سرویس:") + " " + (meta["config_name"] or "—") + idx_suffix + "\n\n"
         + T("subs_lbl_service", "📦 سرویس:") + " " + gb_txt + "\n\n"
         + T("subs_lbl_plan", "💠 پلن:") + " " + _months_label(meta["days"]) + "\n\n"
         + T("subs_lbl_location", "🌍 لوکیشن:") + " " + (meta["location"] or "—") + "\n\n"
@@ -286,20 +365,41 @@ async def _build_sub_detail(telegram_id: int, order_id: int):
 
     rows = []
     if config_link.startswith(_LINK_PREFIXES):
-        rows.append([_btn(T("subs_btn_qr", "📱 دریافت QR Code"), "mysub_qr:" + str(order_id))])
+        rows.append([_btn(T("subs_btn_qr", "📱 دریافت QR Code"), "mysub_qr:" + ref)])
     if sub.get("delivery_file_id"):
-        rows.append([_btn(T("subs_btn_file", "📎 دریافت مجدد فایل کانفیگ"), "mysub_file:" + str(order_id))])
-    rows.append([_btn(T("subs_btn_refresh", "🔄 بروزرسانی وضعیت"), "mysub:" + str(order_id))])
-    rows.append([_btn(T("subs_btn_delete", "🗑 حذف این کانفیگ"), "mysub_del:" + str(order_id))])
+        rows.append([_btn(T("subs_btn_file", "📎 دریافت مجدد فایل کانفیگ"), "mysub_file:" + ref)])
+    rows.append([_btn(T("subs_btn_refresh", "🔄 بروزرسانی وضعیت"), "mysub:" + ref)])
+    rows.append([_btn(T("subs_btn_delete", "🗑 حذف این کانفیگ"), "mysub_del:" + ref)])
     rows.append([_btn(T("subs_btn_back", "⬅️ بازگشت"), "mysub_back")])
     return text, InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _parse_ref(data: str):
+    """
+    'prefix:order_id' یا 'prefix:order_id:account_id' را می‌شکند.
+    خروجی: (order_id, account_id|None)
+    """
+    parts = data.split(":")
+    try:
+        oid = int(parts[1])
+    except (IndexError, ValueError):
+        return None, None
+    aid = None
+    if len(parts) > 2 and parts[2].strip():
+        try:
+            aid = int(parts[2])
+        except ValueError:
+            aid = None
+    return oid, aid
+
+
 @router.callback_query(F.data.startswith("mysub:"))
 async def my_sub_detail(cb: CallbackQuery):
-    order_id = int(cb.data.split(":")[1])
+    order_id, account_id = _parse_ref(cb.data)
+    if order_id is None:
+        return await cb.answer()
     await cb.answer(T("subs_loading", "⏳ در حال دریافت اطلاعات..."), show_alert=False)
-    text, kb = await _build_sub_detail(cb.from_user.id, order_id)
+    text, kb = await _build_sub_detail(cb.from_user.id, order_id, account_id)
     if not text:
         return await cb.answer(T("subs_not_found", "اشتراک پیدا نشد"), show_alert=True)
     try:
@@ -317,10 +417,13 @@ async def my_sub_detail(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("mysub_del:"))
 async def my_sub_delete_confirm(cb: CallbackQuery):
-    order_id = int(cb.data.split(":")[1])
+    order_id, account_id = _parse_ref(cb.data)
+    if order_id is None:
+        return await cb.answer()
+    ref = str(order_id) + ((":" + str(account_id)) if account_id else "")
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [_btn(T("subs_del_yes", "✅ بله، حذف کن"), "mysub_delok:" + str(order_id))],
-        [_btn(T("subs_del_no", "❌ انصراف"), "mysub:" + str(order_id))],
+        [_btn(T("subs_del_yes", "✅ بله، حذف کن"), "mysub_delok:" + ref)],
+        [_btn(T("subs_del_no", "❌ انصراف"), "mysub:" + ref)],
     ])
     txt = T("subs_del_confirm",
             "⚠️ آیا مطمئنید می‌خواهید این کانفیگ را حذف کنید؟\n"
@@ -340,11 +443,20 @@ async def my_sub_delete_confirm(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("mysub_delok:"))
 async def my_sub_delete_do(cb: CallbackQuery):
-    order_id = int(cb.data.split(":")[1])
+    order_id, account_id = _parse_ref(cb.data)
+    if order_id is None:
+        return await cb.answer()
     await cb.answer(T("subs_deleting", "⏳ در حال حذف..."), show_alert=False)
-    # اکانت X-UI مربوط به این سفارش
     from database.db import get_xui_account_by_order, get_connection
-    acc = get_xui_account_by_order(order_id)
+
+    # اکانت هدف: در سفارش چندتایی فقط همان اکانت حذف می‌شود
+    accounts = _order_accounts(cb.from_user.id, order_id)
+    acc = None
+    if account_id:
+        acc = next((a for a in accounts if int(a["id"]) == int(account_id)), None)
+    if not acc:
+        acc = accounts[0] if accounts else get_xui_account_by_order(order_id)
+
     # حذف از پنل
     if acc and acc.get("email") and acc.get("server_id"):
         try:
@@ -352,13 +464,26 @@ async def my_sub_delete_do(cb: CallbackQuery):
             await delete_account(acc["email"], acc["server_id"])
         except Exception:
             pass
-    # حذف از دیتابیس (اشتراک + اکانت)
+
+    # حذف از دیتابیس
     try:
         conn = get_connection(); cur = conn.cursor()
-        cur.execute("UPDATE subscriptions SET status='deleted' WHERE order_id=? AND telegram_id=?",
-                    (order_id, cb.from_user.id))
-        cur.execute("UPDATE xui_accounts SET status='deleted' WHERE order_id=? AND telegram_id=?",
-                    (order_id, cb.from_user.id))
+        if acc and acc.get("id"):
+            cur.execute("UPDATE xui_accounts SET status='deleted' WHERE id=? AND telegram_id=?",
+                        (acc["id"], cb.from_user.id))
+        else:
+            cur.execute("UPDATE xui_accounts SET status='deleted' WHERE order_id=? AND telegram_id=?",
+                        (order_id, cb.from_user.id))
+        # اشتراک فقط وقتی بسته می‌شود که کانفیگ فعال دیگری از این سفارش نمانده باشد
+        cur.execute(
+            "SELECT COUNT(*) AS c FROM xui_accounts "
+            "WHERE order_id=? AND telegram_id=? AND COALESCE(status,'') != 'deleted'",
+            (order_id, cb.from_user.id),
+        )
+        remaining = cur.fetchone()["c"]
+        if remaining == 0:
+            cur.execute("UPDATE subscriptions SET status='deleted' WHERE order_id=? AND telegram_id=?",
+                        (order_id, cb.from_user.id))
         conn.commit(); conn.close()
     except Exception:
         pass
@@ -371,9 +496,22 @@ async def my_sub_delete_do(cb: CallbackQuery):
 
 
 async def my_sub_qr(cb: CallbackQuery):
-    order_id = int(cb.data.split(":")[1])
+    order_id, account_id = _parse_ref(cb.data)
+    if order_id is None:
+        return await cb.answer()
     sub = get_subscription_by_order(cb.from_user.id, order_id)
-    link = _extract_config_link(sub) if sub else ""
+    # لینک اکانت مشخص (سفارش چندتایی)، وگرنه از متن تحویل
+    link = ""
+    accounts = _order_accounts(cb.from_user.id, order_id)
+    acc = None
+    if account_id:
+        acc = next((a for a in accounts if int(a["id"]) == int(account_id)), None)
+    if not acc and accounts:
+        acc = accounts[0]
+    if acc and (acc.get("config_link") or "").strip():
+        link = acc["config_link"].strip()
+    if not link:
+        link = _extract_config_link(sub) if sub else ""
     if not link:
         return await cb.answer(T("subs_no_link", "لینک کانفیگ موجود نیست"), show_alert=True)
     await cb.answer(T("subs_qr_making", "⏳ در حال ساخت QR..."), show_alert=False)
@@ -390,7 +528,9 @@ async def my_sub_qr(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("mysub_file:"))
 async def my_sub_file(cb: CallbackQuery):
-    order_id = int(cb.data.split(":")[1])
+    order_id, _acc = _parse_ref(cb.data)
+    if order_id is None:
+        return await cb.answer()
     sub = get_subscription_by_order(cb.from_user.id, order_id)
     if not sub or not sub.get("delivery_file_id"):
         return await cb.answer(T("subs_no_file", "فایلی برای این اشتراک موجود نیست"), show_alert=True)

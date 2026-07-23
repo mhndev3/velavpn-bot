@@ -331,18 +331,32 @@ async def admin_approve_payment_handler(callback: CallbackQuery, state: FSMConte
         except Exception:
             price_txt = str(price)
         cfg_name = result.get("email") or order.get("config_name") or ""
+
+        # نوع سفارش: خرید جدید یا تمدید
+        try:
+            from handlers.user_renew import order_is_renewal
+            _is_renew = order_is_renewal(order)
+        except Exception:
+            _is_renew = bool((order.get("renew_email") or "").strip())
+        kind_line = "♻️ نوع: تمدید سرویس" if _is_renew else "🛒 نوع: خرید جدید"
+
         invoice = (
             "🧾 فاکتور سفارش #" + str(order_id) + "\n"
             "━━━━━━━━━━━━━━\n"
+            + kind_line + "\n"
             "کاربر: " + str(uname) + "\n"
             "آیدی: " + str(target_user_id) + "\n"
             "سرویس: " + str(order.get("service_name") or "—") + "\n"
             "پلن: " + str(order.get("plan_title") or "—") + "\n"
         )
+        if quantity > 1:
+            invoice += "🔢 تعداد: " + str(quantity) + " عدد\n"
+            invoice += "🔑 کانفیگ ساخته‌شده: " + str(1 + len(extra_results)) + " عدد\n"
         if cfg_name:
             invoice += "نام کانفیگ: " + str(cfg_name) + "\n"
         invoice += "مبلغ: " + price_txt + " تومان\n\n"
-        invoice += "✅ سفارش تایید و کانفیگ ارسال شد"
+        invoice += ("✅ تمدید انجام و اطلاع داده شد" if _is_renew
+                    else "✅ سفارش تایید و کانفیگ ارسال شد")
         try:
             await callback.message.answer(invoice)
         except Exception:
