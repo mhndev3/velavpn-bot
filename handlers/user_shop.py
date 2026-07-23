@@ -366,6 +366,9 @@ def _loc_kb():
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     rows = [[InlineKeyboardButton(text=lbl, callback_data="sl_loc:" + str(sid))]
             for sid, lbl in _starlink_locations()]
+    # انتخاب لوکیشن اولین مرحلهٔ خرید است، پس بازگشت به منوی اصلی می‌رود
+    rows.append([InlineKeyboardButton(text=T("shop_btn_back", "⬅️ بازگشت"),
+                                      callback_data="u:menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
