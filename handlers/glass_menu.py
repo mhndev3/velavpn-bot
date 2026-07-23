@@ -57,14 +57,15 @@ async def _apply_launcher_kb(target):
     کاربر می‌ماند و دکمه‌های آن به هندلرهای معمولی می‌روند (پس منوی شیشه‌ای
     عملاً باز نمی‌شود).
 
-    توجه: این پیام حذف نمی‌شود؛ حذفِ پیامی که کیبورد را حمل می‌کند در بعضی
-    کلاینت‌ها کیبورد را هم برمی‌گرداند و باگ قبلی همین بود.
+    پیام لنگرگاه بدون متن راهنما فرستاده و بلافاصله حذف می‌شود؛ کیبورد معمولی
+    در تلگرام وضعیت چت است و با حذفِ پیام از بین نمی‌رود.
     """
     try:
-        await target.answer(
-            T("glass_launcher_hint", "برای باز کردن منو دکمهٔ «📋 منو» را بزنید."),
-            reply_markup=glass_launcher_kb(),
-        )
+        m = await target.answer("📋", reply_markup=glass_launcher_kb())
+        try:
+            await m.delete()
+        except Exception:
+            pass
     except Exception:
         pass
 
